@@ -25,7 +25,9 @@ docs/       планы, исследования
 - [x] Фаза 2 (база) — пайплайн: погода (Open-Meteo) + солунар (Astronomy Engine), пилотные точки
 - [x] Фаза 2 (спутник, CMEMS) — SST/температура/солёность по морским точкам
   (см. `docs/phase2/satellite-sources.md`); NASA (Ладога) — следующий шаг
-- [ ] Фаза 3 — модель клёва
+- [x] Фаза 3 (rule-v1) — прогноз клёва: `ml/features.py` (матрица признаков), `ml/score.py`
+  (правило-скор 0–100 → `predictions`), `ml/train.py` (LightGBM→ONNX, ждёт метки из `catches`),
+  `GET /api/spots/{id}/forecast`; ML-модель — следующий шаг
 - [ ] Фаза 4 — fish ID + правила
 - [ ] Фаза 5 — мобильное приложение (Flutter)
 - [ ] Фаза 6 — запуск
@@ -42,7 +44,8 @@ docs/       планы, исследования
 - `backend/src/Klevo.Api` — минимальное Web API (EF Core 10 + Npgsql 10 + PostGIS/NetTopologySuite)
 - Запуск: `dotnet run --project backend/src/Klevo.Api` → http://localhost:5178
 - Эндпоинты: `GET /health`, `GET /api/zones`, `GET /api/zones/{id}/rules`,
-  `GET /api/spots`, `GET /api/spots/{id}/conditions?date=YYYY-MM-DD`
+  `GET /api/spots`, `GET /api/spots/{id}/conditions?date=YYYY-MM-DD`,
+  `GET /api/spots/{id}/forecast?date=YYYY-MM-DD`
 - Тесты: `dotnet test backend/Klevo.slnx` (интеграционные + астро, нужен локальный PG)
 
 ## Пайплайн данных (`backend/src/Klevo.Ingest`)
