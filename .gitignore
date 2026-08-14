@@ -1,0 +1,31 @@
+# dotnet
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# flutter
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.dart_tool/
+.packages
+*.iml
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# data & secrets
+*.env
+.env
+data/raw/
+*.onnx
+
+# ide
+.idea/
+*.swp
