@@ -40,7 +40,12 @@ CMEMS озёра не покрывает. Для Ладоги нужны L3 пр
 - Скрипт: `backend/ingest/python/satellite/fetch_cmems.py`.
   ```bash
   python fetch_cmems.py --from 2026-05-01 --to 2026-05-31 [--dry-run]
+  python fetch_cmems.py --bgc --from 2023-01-01 --to 2026-05-31   # Chl-a
   ```
+- Нюанс BGC: в распреснённой Невской губе модель ERSEM даёт ~0 chl — значения
+  < 0.05 мг/м³ отбрасываются (NULL), для Лахты с `--max-km 30` реальные
+  значения есть только в ~24 месяцах из 41. NASA CHL озёра маскирует —
+  хлорофилл для Ладоги через стандартные продукты недоступен (позже Sentinel-2).
 - Схема (реализована, чуть шире предложенной):
   ```sql
   CREATE TABLE satellite_obs (
@@ -56,7 +61,9 @@ CMEMS озёра не покрывает. Для Ладоги нужны L3 пр
       UNIQUE (spot_id, observed_at, source)
   );
   ```
-- `fetch_nasa.py` (MODIS/VIIRS L3SMI для Ладоги) — следующий шаг.
+- `fetch_nasa.py` (MODIS Aqua L3SMI SST для Ладоги) — скачивание по `getfile`,
+  фильтр `qual_sst<=1`, ближайшая валидная ячейка в радиусе ≤15 км,
+  источник `nasa_modis_aqua`.
 
 ## Доступ к данным (проверено)
 
@@ -83,8 +90,8 @@ CMEMS озёра не покрывает. Для Ладоги нужны L3 пр
 - [x] `fetch_cmems.py`: выгрузка + upsert в `satellite_obs` (проверено, идемпотентно)
 - [x] Бэкфилл CMEMS 2023-01-01 … 2026-05-31: 2494 записи (Лахта, Кургальский)
 - [x] Спутниковые данные в `/api/spots/{id}/conditions` (поле `satellite`)
-- [ ] `fetch_nasa.py` (MODIS/VIIRS L3SMI, Ладога) — Ладожские точки пока без SST
-- [ ] CMEMS Chl-a (`cmems_mod_bal_bgc_my_P1M-m`) — заполнить `chla_mgm3`
+- [x] `fetch_nasa.py` (MODIS Aqua L3SMI SST) — Ладога покрыта, 2215 записей
+- [x] CMEMS Chl-a (`cmems_mod_bal_bgc_my_P1M-m`, `--bgc`) — 65 записей (Лахта, Кургальский)
 
 ## Учётные записи — чек-лист
 
@@ -97,7 +104,7 @@ CMEMS озёра не покрывает. Для Ладоги нужны L3 пр
 2. Подтвердить email по ссылке из письма.
 3. Подписаться на продукты (кнопка "Subscribe" на странице продукта):
    - `BALTICSEA_MULTIYEAR_PHY_003_011` — физика, SST (история)
-   - `BALTICSEA_MULTIYEAR_BGC_003_011` — биогеохимия, Chl-a (история)
+   - `BALTICSEA_MULTIYEAR_BGC_003_012` — биогеохимия, Chl-a (история)
 4. В профиле сгенерировать **API-токен** (Copernicus Marine token)
    или взять логин/пароль.
 5. Отдать мне токен (или логин/пароль) → кладу в `backend/ingest/python/satellite/.env`.

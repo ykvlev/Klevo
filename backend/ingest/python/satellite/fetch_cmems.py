@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Klevo: загрузка спутниковых наблюдений CMEMS (Baltic Sea Reanalysis) в БД.
 
-Источник: BALTICSEA_MULTIYEAR_PHY_003_011, dataset cmems_mod_bal_phy_my_P1D-m.
+Источник (физика): BALTICSEA_MULTIYEAR_PHY_003_011, dataset cmems_mod_bal_phy_my_P1D-m.
 Переменные: thetao (поверхность), so (поверхность), mlotst, bottomT.
+Источник (биогеохимия, флаг --bgc): BALTICSEA_MULTIYEAR_BGC_003_012,
+dataset cmems_mod_bal_bgc_my_P1M-m, переменная chl -> chla_mgm3.
 Для точек вне маски моря берётся ближайшая валидная ячейка в радиусе max_km.
 
 Пример:
     python fetch_cmems.py --from 2026-05-01 --to 2026-05-31
-    python fetch_cmems.py --from 2026-01-01 --to 2026-05-31 --dry-run
+    python fetch_cmems.py --bgc --from 2023-01-01 --to 2026-05-31
 """
 from __future__ import annotations
 
@@ -25,7 +27,8 @@ import xarray as xr
 
 DS_ID = "cmems_mod_bal_phy_my_P1D-m"
 SOURCE = "cmems_bal_my_phy"
-VARS = ["thetao", "bottomT", "mlotst", "so"]
+BGC_DS_ID = "cmems_mod_bal_bgc_my_P1M-m"
+BGC_SOURCE = "cmems_bal_my_bgc"
 KM_PER_DEG_LAT = 111.0
 MAX_KM = 15.0
 PAD_DEG = 0.35
@@ -52,14 +55,16 @@ def load_dotenv() -> None:
 
 
 def subset(spot_id: str, lon: float, lat: float, d0: str, d1: str,
-           out_dir: Path, dry_run: bool) -> Path | None:
+           out_dir: Path, dry_run: bool, bgc: bool = False) -> Path | None:
     """Выгружает малый bbox вокруг точки через copernicusmarine subset."""
     exe = Path(sys.executable).parent / "copernicusmarine.exe"
+    ds_id, var_args = (BGC_DS_ID, ["--variable", "chl"]) if bgc else \
+        (DS_ID, ["--variable", "thetao", "--variable", "bottomT",
+                 "--variable", "mlotst", "--variable", "so"])
     args = [
         str(exe), "subset",
-        "-i", DS_ID,
-        "--variable", "thetao", "--variable", "bottomT",
-        "--variable", "mlotst", "--variable", "so",
+        "-i", ds_id,
+        *var_args,
         "--minimum-longitude", f"{lon - PAD_DEG:.3f}",
         "--maximum-longitude", f"{lon + PAD_DEG:.3f}",
         "--minimum-latitude", f"{lat - PAD_DEG:.3f}",
@@ -96,12 +101,23 @@ def nearest_valid(da: xr.DataArray, lon: float, lat: float, max_km: float) -> fl
     return float(da.values[j, i])
 
 
-def extract(path: Path, lon: float, lat: float, max_km: float) -> list[tuple]:
-    """Возвращает кортежи (date, sst, bottomT, mlotst, salinity)."""
+def extract(path: Path, lon: float, lat: float, max_km: float, bgc: bool = False) -> list[tuple]:
+    """Возвращает кортежи (date, ...значения) для физики или биогеохимии."""
     ds = xr.open_dataset(path)
     rows: list[tuple] = []
     with ds:
         times = ds.time.values
+        if bgc:
+            chl = ds["chl"].isel(depth=0)
+            for t_idx, t in enumerate(times):
+                d = np.datetime64(t, "D").astype("datetime64[ns]")
+                v = nearest_valid(chl[t_idx], lon, lat, max_km)
+                if v is None or v < 0.05:
+                    continue
+                rows.append((d.astype("datetime64[D]").astype(object).strftime("%Y-%m-%d"),
+                             round(v, 4)))
+            return rows
+
         thetao = ds["thetao"].isel(depth=0)
         for t_idx, t in enumerate(times):
             d = np.datetime64(t, "D").astype("datetime64[ns]")
@@ -121,18 +137,28 @@ def extract(path: Path, lon: float, lat: float, max_km: float) -> list[tuple]:
     return rows
 
 
-def upsert(conn, rows: list[tuple], spot_id: str) -> None:
-    sql = """
-        INSERT INTO satellite_obs (spot_id, observed_at, sst_c, bottom_t_c, mlotst_m, salinity_psu, source)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (spot_id, observed_at, source)
-        DO UPDATE SET sst_c = EXCLUDED.sst_c,
-                      bottom_t_c = EXCLUDED.bottom_t_c,
-                      mlotst_m = EXCLUDED.mlotst_m,
-                      salinity_psu = EXCLUDED.salinity_psu;
-    """
+def upsert(conn, rows: list[tuple], spot_id: str, bgc: bool = False) -> None:
+    if bgc:
+        sql = """
+            INSERT INTO satellite_obs (spot_id, observed_at, chla_mgm3, source)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (spot_id, observed_at, source)
+            DO UPDATE SET chla_mgm3 = EXCLUDED.chla_mgm3;
+        """
+        params = [(spot_id, *r, BGC_SOURCE) for r in rows]
+    else:
+        sql = """
+            INSERT INTO satellite_obs (spot_id, observed_at, sst_c, bottom_t_c, mlotst_m, salinity_psu, source)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (spot_id, observed_at, source)
+            DO UPDATE SET sst_c = EXCLUDED.sst_c,
+                          bottom_t_c = EXCLUDED.bottom_t_c,
+                          mlotst_m = EXCLUDED.mlotst_m,
+                          salinity_psu = EXCLUDED.salinity_psu;
+        """
+        params = [(spot_id, *r, SOURCE) for r in rows]
     with conn.cursor() as cur:
-        cur.executemany(sql, [(spot_id, *r, SOURCE) for r in rows])
+        cur.executemany(sql, params)
     conn.commit()
 
 
@@ -142,6 +168,7 @@ def main() -> None:
     ap.add_argument("--to", dest="d1", required=True, help="конец периода YYYY-MM-DD")
     ap.add_argument("--spots", nargs="*", help="ограничить точки по UUID")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--bgc", action="store_true", help="биогеохимия (chl -> chla_mgm3)")
     ap.add_argument("--max-km", type=float, default=MAX_KM)
     args = ap.parse_args()
 
@@ -161,22 +188,23 @@ def main() -> None:
         print(f"Точек: {len(spots)}; период {args.d0} .. {args.d1}")
 
         for spot_id, lon, lat, name in spots:
-            nc = subset(spot_id, lon, lat, args.d0, args.d1, out_dir, args.dry_run)
+            nc = subset(spot_id, lon, lat, args.d0, args.d1, out_dir, args.dry_run, args.bgc)
             if nc is None:
                 if args.dry_run:
                     print(f"  {name}: (dry-run) пропуск")
                 else:
                     print(f"  {name}: выгрузка не удалась")
                 continue
-            rows = extract(nc, lon, lat, args.max_km)
+            rows = extract(nc, lon, lat, args.max_km, args.bgc)
             if not rows:
                 print(f"  {name}: нет валидных данных (суша/вне маски)")
                 continue
             if args.dry_run:
                 print(f"  {name}: дней {len(rows)}, пример {rows[0]}")
             else:
-                upsert(conn, rows, spot_id)
-                print(f"  {name}: {len(rows)} записей (sst на {rows[-1][1]} C)")
+                upsert(conn, rows, spot_id, args.bgc)
+                label = f"chl={rows[-1][1]}" if args.bgc else f"sst={rows[-1][1]} C"
+                print(f"  {name}: {len(rows)} записей ({label})")
 
     conn.close()
 
