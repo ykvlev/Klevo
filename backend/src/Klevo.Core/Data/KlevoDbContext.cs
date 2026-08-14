@@ -16,6 +16,7 @@ public class KlevoDbContext(DbContextOptions<KlevoDbContext> options) : DbContex
     public DbSet<SolunarDay> SolunarDays => Set<SolunarDay>();
     public DbSet<SatelliteObservation> SatelliteObservations => Set<SatelliteObservation>();
     public DbSet<Prediction> Predictions => Set<Prediction>();
+    public DbSet<Catch> Catches => Set<Catch>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -64,6 +65,12 @@ public class KlevoDbContext(DbContextOptions<KlevoDbContext> options) : DbContex
         modelBuilder.Entity<Prediction>(e =>
         {
             e.HasIndex(p => new { p.SpotId, p.Date }).IsUnique();
+        });
+
+        modelBuilder.Entity<Catch>(e =>
+        {
+            e.Property(c => c.Weather).HasColumnType("jsonb");
+            e.HasIndex(c => new { c.SpotId, c.CaughtAt });
         });
     }
 }

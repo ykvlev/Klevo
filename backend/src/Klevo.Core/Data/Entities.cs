@@ -281,6 +281,46 @@ public class SolunarDay
     public DateTime? Minor2End { get; set; }
 }
 
+[Table("catches")]
+public class Catch
+{
+    [Key, Column("id")]
+    public Guid Id { get; set; }
+
+    [Column("user_id")]
+    public Guid? UserId { get; set; }
+
+    [Column("spot_id")]
+    public Guid? SpotId { get; set; }
+
+    [Column("species_id")]
+    public Guid? SpeciesId { get; set; }
+
+    [Column("species_name")]
+    public string SpeciesName { get; set; } = "";
+
+    [Column("weight_kg")]
+    public decimal? WeightKg { get; set; }
+
+    [Column("length_cm")]
+    public decimal? LengthCm { get; set; }
+
+    [Column("photo_url")]
+    public string? PhotoUrl { get; set; }
+
+    [Column("caught_at")]
+    public DateTime CaughtAt { get; set; }
+
+    [Column("weather")]
+    public string? Weather { get; set; }
+
+    [Column("notes")]
+    public string? Notes { get; set; }
+
+    [Column("created_at")]
+    public DateTime CreatedAt { get; set; }
+}
+
 [Table("predictions")]
 public class Prediction
 {

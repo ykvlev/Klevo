@@ -45,7 +45,9 @@ docs/       планы, исследования
 - Запуск: `dotnet run --project backend/src/Klevo.Api` → http://localhost:5178
 - Эндпоинты: `GET /health`, `GET /api/zones`, `GET /api/zones/{id}/rules`,
   `GET /api/spots`, `GET /api/spots/{id}/conditions?date=YYYY-MM-DD`,
-  `GET /api/spots/{id}/forecast?date=YYYY-MM-DD`
+  `GET /api/spots/{id}/forecast?date=YYYY-MM-DD`,
+  `GET /api/spots/{id}/catches?from=&to=`, `POST /api/spots/{id}/catches`
+  (улов = метка для ML)
 - Тесты: `dotnet test backend/Klevo.slnx` (интеграционные + астро, нужен локальный PG)
 
 ## Пайплайн данных (`backend/src/Klevo.Ingest`)
@@ -59,3 +61,12 @@ docs/       планы, исследования
 - `fetch_cmems.py --from YYYY-MM-DD --to YYYY-MM-DD` — CMEMS Baltic Sea Reanalysis
   (SST, придонная T, глубина перемешивания, солёность) → `satellite_obs`
 - venv: `backend/ingest/python/satellite/.venv`; учётка в `.env` (gitignored)
+
+## ML (`backend/ingest/python/ml`, venv `.venv`, Python 3.14)
+- `features.py` — ежедневная матрица признаков (погода + солунар + спутник + lag)
+- `score.py` — правило-базовый скор 0–100 → `predictions` (model_version `rule-v1`)
+- `train.py --features X.csv --labels Y.csv` — LightGBM → ONNX (паритет 1e-5);
+  без меток завершается корректно; реальные метки = уловы из `catches`
+- `onnx_export.py` — свой экспортёр TreeEnsemble→ONNX (skl2onnx/hummingbird
+  не имеют wheels для Python 3.14)
+- `make_demo_labels.py` — демо-метки для проверки пайплайна (не для продакшена)

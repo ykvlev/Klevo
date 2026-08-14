@@ -1,4 +1,5 @@
 .venv/
 __pycache__/
 features_*.csv
+demo_catches.csv
 models/

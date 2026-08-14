@@ -109,7 +109,7 @@ def main() -> None:
         min_child_samples=20, subsample=0.8, colsample_bytree=0.8,
         random_state=42, verbose=-1)
     model.fit(X_train, y_train,
-              eval_set=[(X_test, y_test)],
+              eval_X=X_test, eval_y=y_test,
               callbacks=[lgb.early_stopping(30, verbose=False)])
 
     proba = model.predict_proba(X_test)[:, 1]
@@ -122,12 +122,21 @@ def main() -> None:
     print(f"Модель: {out / 'model.lgb'}")
 
     try:
-        import lightgbm as lgb
-        from onnx import numpy_helper, save_model
+        import numpy as np
+        import onnxruntime as ort
 
-        model_onnx = lgb.convert_model(model.booster_, target_opset=18)
-        save_model(model_onnx, str(out / "model.onnx"))
+        from onnx_export import lgbm_to_onnx
+
+        lgbm_to_onnx(model, str(out / "model.onnx"), MODEL_COLS)
         print(f"ONNX: {out / 'model.onnx'}")
+
+        sess = ort.InferenceSession(str(out / "model.onnx"),
+                                    providers=["CPUExecutionProvider"])
+        x = X_test.head(5).fillna(0).values.astype(np.float32)
+        onnx_p = sess.run(None, {"input": x})[1][:, 1]
+        lgb_p = model.predict_proba(x)[:, 1]
+        print(f"Проверка ONNX vs LightGBM (первые 5): "
+              f"{np.round(np.abs(onnx_p - lgb_p), 5).max():.5f} макс. расхождение")
     except Exception as exc:  # noqa: BLE001
         print(f"ONNX-экспорт не удался: {exc}")
 

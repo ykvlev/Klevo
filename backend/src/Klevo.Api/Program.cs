@@ -164,6 +164,77 @@ app.MapGet("/api/spots/{id}/conditions", async (Guid id, DateOnly date, KlevoDbC
     });
 });
 
+app.MapGet("/api/spots/{id}/catches", async (Guid id, DateOnly? from, DateOnly? to, KlevoDbContext db) =>
+{
+    var spot = await db.Spots.FindAsync(id);
+    if (spot is null)
+        return Results.NotFound();
+
+    var query = db.Catches
+        .Where(c => c.SpotId == id)
+        .AsQueryable();
+    if (from is not null)
+        query = query.Where(c => c.CaughtAt >= DateTime.SpecifyKind(
+            from.Value.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc));
+    if (to is not null)
+        query = query.Where(c => c.CaughtAt < DateTime.SpecifyKind(
+            to.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc));
+
+    return Results.Ok(await query
+        .OrderByDescending(c => c.CaughtAt)
+        .Select(c => new
+        {
+            id = c.Id,
+            speciesId = c.SpeciesId,
+            speciesName = c.SpeciesName,
+            weightKg = c.WeightKg,
+            lengthCm = c.LengthCm,
+            photoUrl = c.PhotoUrl,
+            caughtAt = c.CaughtAt,
+            notes = c.Notes,
+        })
+        .ToListAsync());
+});
+
+app.MapPost("/api/spots/{id}/catches", async (Guid id, CreateCatchRequest req, KlevoDbContext db) =>
+{
+    var spot = await db.Spots.FindAsync(id);
+    if (spot is null)
+        return Results.NotFound();
+
+    var speciesName = req.SpeciesName ?? "";
+    if (req.SpeciesId is not null)
+    {
+        var species = await db.Species.FindAsync(req.SpeciesId.Value);
+        if (species is not null)
+            speciesName = species.NameRu;
+    }
+
+    var caughtAt = (req.CaughtAt ?? DateTime.UtcNow).ToUniversalTime();
+    var catchEntity = new Catch
+    {
+        Id = Guid.NewGuid(),
+        SpotId = id,
+        SpeciesId = req.SpeciesId,
+        SpeciesName = speciesName,
+        WeightKg = req.WeightKg,
+        LengthCm = req.LengthCm,
+        PhotoUrl = req.PhotoUrl,
+        CaughtAt = caughtAt,
+        Notes = req.Notes,
+        CreatedAt = DateTime.UtcNow,
+    };
+    db.Catches.Add(catchEntity);
+    await db.SaveChangesAsync();
+
+    return Results.Created($"/api/spots/{id}/catches/{catchEntity.Id}", new
+    {
+        id = catchEntity.Id,
+        speciesName = catchEntity.SpeciesName,
+        caughtAt = catchEntity.CaughtAt,
+    });
+});
+
 app.MapGet("/api/spots/{id}/forecast", async (Guid id, DateOnly? date, KlevoDbContext db) =>
 {
     var spot = await db.Spots.FindAsync(id);
@@ -189,5 +260,9 @@ app.MapGet("/api/spots/{id}/forecast", async (Guid id, DateOnly? date, KlevoDbCo
 });
 
 app.Run();
+
+record CreateCatchRequest(
+    Guid? SpeciesId, string? SpeciesName, decimal? WeightKg,
+    decimal? LengthCm, string? PhotoUrl, DateTime? CaughtAt, string? Notes);
 
 public partial class Program;
