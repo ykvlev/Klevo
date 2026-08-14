@@ -149,6 +149,25 @@ CREATE TABLE IF NOT EXISTS solunar_daily (
 CREATE INDEX IF NOT EXISTS idx_solunar_date ON solunar_daily(date);
 
 -- ============================================================
+-- Спутниковые наблюдения (CMEMS, NASA MODIS/VIIRS) — на день
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS satellite_obs (
+    id          bigserial PRIMARY KEY,
+    spot_id     uuid NOT NULL REFERENCES spots(id) ON DELETE CASCADE,
+    observed_at date NOT NULL,
+    sst_c       numeric(5,2),
+    bottom_t_c  numeric(5,2),
+    mlotst_m    numeric(6,1),
+    salinity_psu numeric(6,2),
+    chla_mgm3   numeric(6,4),
+    source      text NOT NULL,
+    UNIQUE (spot_id, observed_at, source)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sat_obs_spot_time ON satellite_obs(spot_id, observed_at DESC);
+
+-- ============================================================
 -- Справочник правил рыболовства
 -- ============================================================
 

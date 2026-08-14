@@ -121,7 +121,21 @@ app.MapGet("/api/spots/{id}/conditions", async (Guid id, DateOnly date, KlevoDbC
         })
         .ToListAsync();
 
-    if (solunar is null && weather.Count == 0)
+    var satellite = await db.SatelliteObservations
+        .Where(o => o.SpotId == id && o.ObservedAt == date)
+        .OrderBy(o => o.Source)
+        .Select(o => new
+        {
+            source = o.Source,
+            sstC = o.SstC,
+            bottomTC = o.BottomTC,
+            mlotstM = o.MlotstM,
+            salinityPsu = o.SalinityPsu,
+            chlaMgm3 = o.ChlaMgm3,
+        })
+        .ToListAsync();
+
+    if (solunar is null && weather.Count == 0 && satellite.Count == 0)
         return Results.NotFound();
 
     return Results.Ok(new
@@ -146,6 +160,7 @@ app.MapGet("/api/spots/{id}/conditions", async (Guid id, DateOnly date, KlevoDbC
             minor2Window = new { start = solunar.Minor2Start, end = solunar.Minor2End },
         },
         weather,
+        satellite,
     });
 });
 

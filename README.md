@@ -23,7 +23,8 @@ docs/       планы, исследования
 - [x] Фаза 1 (БД) — PostgreSQL 17 + PostGIS, схема, сид правил
 - [x] Фаза 1 (API) — ASP.NET Core 10, EF Core + Npgsql, эндпоинты правил
 - [x] Фаза 2 (база) — пайплайн: погода (Open-Meteo) + солунар (Astronomy Engine), пилотные точки
-- [ ] Фаза 2 (спутник) — SST/Chl-a (CMEMS, NASA), см. `docs/phase2/satellite-sources.md`
+- [x] Фаза 2 (спутник, CMEMS) — SST/температура/солёность по морским точкам
+  (см. `docs/phase2/satellite-sources.md`); NASA (Ладога) — следующий шаг
 - [ ] Фаза 3 — модель клёва
 - [ ] Фаза 4 — fish ID + правила
 - [ ] Фаза 5 — мобильное приложение (Flutter)
@@ -50,3 +51,8 @@ docs/       планы, исследования
 - `weather --days N | --from D --to T` — часовые наблюдения Open-Meteo
   (прогноз или архив) для всех точек
 - `all` — погода + солунар за один запуск
+
+## Спутниковые данные (`backend/ingest/python/satellite`)
+- `fetch_cmems.py --from YYYY-MM-DD --to YYYY-MM-DD` — CMEMS Baltic Sea Reanalysis
+  (SST, придонная T, глубина перемешивания, солёность) → `satellite_obs`
+- venv: `backend/ingest/python/satellite/.venv`; учётка в `.env` (gitignored)

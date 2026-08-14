@@ -29,3 +29,4 @@ data/raw/
 # ide
 .idea/
 *.swp
+backend/ingest/python/satellite/.env

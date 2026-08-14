@@ -281,3 +281,34 @@ public class SolunarDay
     public DateTime? Minor2End { get; set; }
 }
 
+[Table("satellite_obs")]
+public class SatelliteObservation
+{
+    [Key, Column("id")]
+    public long Id { get; set; }
+
+    [Column("spot_id")]
+    public Guid SpotId { get; set; }
+
+    [Column("observed_at")]
+    public DateOnly ObservedAt { get; set; }
+
+    [Column("sst_c")]
+    public decimal? SstC { get; set; }
+
+    [Column("bottom_t_c")]
+    public decimal? BottomTC { get; set; }
+
+    [Column("mlotst_m")]
+    public decimal? MlotstM { get; set; }
+
+    [Column("salinity_psu")]
+    public decimal? SalinityPsu { get; set; }
+
+    [Column("chla_mgm3")]
+    public decimal? ChlaMgm3 { get; set; }
+
+    [Column("source")]
+    public string Source { get; set; } = "cmems";
+}
+
