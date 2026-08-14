@@ -281,6 +281,34 @@ public class SolunarDay
     public DateTime? Minor2End { get; set; }
 }
 
+[Table("predictions")]
+public class Prediction
+{
+    [Key, Column("id")]
+    public Guid Id { get; set; }
+
+    [Column("spot_id")]
+    public Guid SpotId { get; set; }
+
+    [Column("date")]
+    public DateOnly Date { get; set; }
+
+    [Column("score")]
+    public short Score { get; set; }
+
+    [Column("best_start")]
+    public TimeOnly? BestStart { get; set; }
+
+    [Column("best_end")]
+    public TimeOnly? BestEnd { get; set; }
+
+    [Column("model_version")]
+    public string ModelVersion { get; set; } = "";
+
+    [Column("created_at")]
+    public DateTime CreatedAt { get; set; }
+}
+
 [Table("satellite_obs")]
 public class SatelliteObservation
 {

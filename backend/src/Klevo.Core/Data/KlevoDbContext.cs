@@ -15,6 +15,7 @@ public class KlevoDbContext(DbContextOptions<KlevoDbContext> options) : DbContex
     public DbSet<WeatherObservation> WeatherObservations => Set<WeatherObservation>();
     public DbSet<SolunarDay> SolunarDays => Set<SolunarDay>();
     public DbSet<SatelliteObservation> SatelliteObservations => Set<SatelliteObservation>();
+    public DbSet<Prediction> Predictions => Set<Prediction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -58,6 +59,11 @@ public class KlevoDbContext(DbContextOptions<KlevoDbContext> options) : DbContex
         modelBuilder.Entity<SatelliteObservation>(e =>
         {
             e.HasIndex(o => new { o.SpotId, o.ObservedAt, o.Source }).IsUnique();
+        });
+
+        modelBuilder.Entity<Prediction>(e =>
+        {
+            e.HasIndex(p => new { p.SpotId, p.Date }).IsUnique();
         });
     }
 }

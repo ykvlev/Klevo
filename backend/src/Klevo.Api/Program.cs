@@ -164,6 +164,30 @@ app.MapGet("/api/spots/{id}/conditions", async (Guid id, DateOnly date, KlevoDbC
     });
 });
 
+app.MapGet("/api/spots/{id}/forecast", async (Guid id, DateOnly? date, KlevoDbContext db) =>
+{
+    var spot = await db.Spots.FindAsync(id);
+    if (spot is null)
+        return Results.NotFound();
+
+    var day = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+    var prediction = await db.Predictions
+        .Where(p => p.SpotId == id && p.Date == day)
+        .SingleOrDefaultAsync();
+    if (prediction is null)
+        return Results.NotFound();
+
+    return Results.Ok(new
+    {
+        spotId = id,
+        date = prediction.Date,
+        score = prediction.Score,
+        bestStart = prediction.BestStart?.ToString("HH:mm"),
+        bestEnd = prediction.BestEnd?.ToString("HH:mm"),
+        modelVersion = prediction.ModelVersion,
+    });
+});
+
 app.Run();
 
 public partial class Program;

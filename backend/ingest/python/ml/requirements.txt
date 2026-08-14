@@ -1,0 +1,8 @@
+pandas>=2.2
+pyarrow
+psycopg2-binary
+python-dotenv
+lightgbm>=4.3
+scikit-learn
+onnx
+onnxruntime
