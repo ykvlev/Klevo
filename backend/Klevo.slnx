@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Klevo.Api/Klevo.Api.csproj" />
+    <Project Path="src/Klevo.Core/Klevo.Core.csproj" />
+    <Project Path="src/Klevo.Ingest/Klevo.Ingest.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Klevo.Api.Tests/Klevo.Api.Tests.csproj" />

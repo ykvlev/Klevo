@@ -22,7 +22,8 @@ docs/       планы, исследования
 - [x] Фаза 0 — фундамент (регион, правила, окружение, репо)
 - [x] Фаза 1 (БД) — PostgreSQL 17 + PostGIS, схема, сид правил
 - [x] Фаза 1 (API) — ASP.NET Core 10, EF Core + Npgsql, эндпоинты правил
-- [ ] Фаза 2 — пайплайн данных (спутник, метео, луна)
+- [x] Фаза 2 (база) — пайплайн: погода (Open-Meteo) + солунар (Astronomy Engine), пилотные точки
+- [ ] Фаза 2 (спутник) — SST/Chl-a (CMEMS, NASA), см. `docs/phase2/satellite-sources.md`
 - [ ] Фаза 3 — модель клёва
 - [ ] Фаза 4 — fish ID + правила
 - [ ] Фаза 5 — мобильное приложение (Flutter)
@@ -34,10 +35,18 @@ docs/       планы, исследования
 ## БД
 - Локально: сервис `postgresql-x64-17`, порт 5432, БД `klevo` / `klevo_test`
 - Dev-пароль postgres: `klevo_dev_pwd`
-- Схема: `backend/db/schema.sql`; сид правил: `backend/db/seed_rules.py`
+- Схема: `backend/db/schema.sql`; сид правил: `backend/db/seed_rules.py`; сид точек: `backend/db/seed_spots.sql`
 
 ## API
 - `backend/src/Klevo.Api` — минимальное Web API (EF Core 10 + Npgsql 10 + PostGIS/NetTopologySuite)
 - Запуск: `dotnet run --project backend/src/Klevo.Api` → http://localhost:5178
-- Эндпоинты: `GET /health`, `GET /api/zones`, `GET /api/zones/{id}/rules`
-- Тесты: `dotnet test backend/Klevo.slnx` (интеграционные, нужен локальный PG)
+- Эндпоинты: `GET /health`, `GET /api/zones`, `GET /api/zones/{id}/rules`,
+  `GET /api/spots`, `GET /api/spots/{id}/conditions?date=YYYY-MM-DD`
+- Тесты: `dotnet test backend/Klevo.slnx` (интеграционные + астро, нужен локальный PG)
+
+## Пайплайн данных (`backend/src/Klevo.Ingest`)
+- `solunar --days N | --from D --to T` — фаза луны, освещённость, восход/заход,
+  кульминации, солунарные окна (major/minor) для всех точек
+- `weather --days N | --from D --to T` — часовые наблюдения Open-Meteo
+  (прогноз или архив) для всех точек
+- `all` — погода + солунар за один запуск

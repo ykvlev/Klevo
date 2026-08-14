@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Klevo.Api\Klevo.Api.csproj" />
+    <ProjectReference Include="..\..\src\Klevo.Ingest\Klevo.Ingest.csproj" />
   </ItemGroup>
 
 </Project>

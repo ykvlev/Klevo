@@ -96,6 +96,59 @@ CREATE TABLE IF NOT EXISTS predictions (
 CREATE INDEX IF NOT EXISTS idx_predictions_spot_date ON predictions(spot_id, date DESC);
 
 -- ============================================================
+-- Наблюдения погоды (Open-Meteo) — часовые
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS weather_obs (
+    id             bigserial PRIMARY KEY,
+    spot_id        uuid NOT NULL REFERENCES spots(id) ON DELETE CASCADE,
+    observed_at    timestamptz NOT NULL,
+    temperature_2m numeric(5,2),
+    pressure_msl   numeric(7,2),
+    humidity_2m    numeric(5,2),
+    wind_speed_10m numeric(5,2),
+    wind_dir_10m   smallint,
+    wind_gusts_10m numeric(5,2),
+    precip         numeric(6,2),
+    cloud_cover    smallint,
+    snow_depth     numeric(5,2),
+    source         text NOT NULL DEFAULT 'open-meteo',
+    UNIQUE (spot_id, observed_at)
+);
+
+CREATE INDEX IF NOT EXISTS idx_weather_obs_spot_time ON weather_obs(spot_id, observed_at DESC);
+
+-- ============================================================
+-- Солунарные данные на день (фаза луны, кульминации, окна клёва)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS solunar_daily (
+    spot_id           uuid NOT NULL REFERENCES spots(id) ON DELETE CASCADE,
+    date              date NOT NULL,
+    moon_phase        numeric(4,3) NOT NULL,
+    moon_illumination numeric(5,2) NOT NULL,
+    moon_rise         timestamptz,
+    moon_set          timestamptz,
+    moon_transit      timestamptz,
+    lower_transit     timestamptz,
+    sun_rise          timestamptz,
+    sun_set           timestamptz,
+    dawn              timestamptz,
+    dusk              timestamptz,
+    major_start       timestamptz,
+    major_end         timestamptz,
+    major2_start      timestamptz,
+    major2_end        timestamptz,
+    minor_start       timestamptz,
+    minor_end         timestamptz,
+    minor2_start      timestamptz,
+    minor2_end        timestamptz,
+    PRIMARY KEY (spot_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_solunar_date ON solunar_daily(date);
+
+-- ============================================================
 -- Справочник правил рыболовства
 -- ============================================================
 

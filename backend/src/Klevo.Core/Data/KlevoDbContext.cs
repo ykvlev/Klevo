@@ -1,6 +1,6 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 
-namespace Klevo.Api.Data;
+namespace Klevo.Core.Data;
 
 public class KlevoDbContext(DbContextOptions<KlevoDbContext> options) : DbContext(options)
 {
@@ -11,9 +11,16 @@ public class KlevoDbContext(DbContextOptions<KlevoDbContext> options) : DbContex
     public DbSet<ZoneLimitRule> LimitRules => Set<ZoneLimitRule>();
     public DbSet<ZoneDefaultLimit> DefaultLimits => Set<ZoneDefaultLimit>();
     public DbSet<ZoneBan> Bans => Set<ZoneBan>();
+    public DbSet<Spot> Spots => Set<Spot>();
+    public DbSet<WeatherObservation> WeatherObservations => Set<WeatherObservation>();
+    public DbSet<SolunarDay> SolunarDays => Set<SolunarDay>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Spot>(e =>
+        {
+            e.Property(s => s.Location).HasColumnType("geography");
+        });
         modelBuilder.Entity<ZoneSizeRule>(e =>
         {
             e.HasKey(r => new { r.ZoneId, r.SpeciesId });
@@ -36,5 +43,16 @@ public class KlevoDbContext(DbContextOptions<KlevoDbContext> options) : DbContex
                 .WithMany()
                 .HasForeignKey(b => b.SpeciesId);
         });
+
+        modelBuilder.Entity<WeatherObservation>(e =>
+        {
+            e.HasIndex(o => new { o.SpotId, o.ObservedAt }).IsUnique();
+        });
+
+        modelBuilder.Entity<SolunarDay>(e =>
+        {
+            e.HasKey(d => new { d.SpotId, d.Date });
+        });
     }
 }
+

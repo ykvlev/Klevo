@@ -1,4 +1,4 @@
-using Klevo.Api.Data;
+using Klevo.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
 
@@ -74,6 +74,78 @@ app.MapGet("/api/zones/{id}/rules", async (string id, KlevoDbContext db) =>
         defaultDailyLimitKg = defaultLimit?.DefaultKg,
         defaultLimitNote = defaultLimit?.Note,
         bans,
+    });
+});
+
+app.MapGet("/api/spots", async (KlevoDbContext db) =>
+    await db.Spots
+        .OrderBy(s => s.Name)
+        .Select(s => new
+        {
+            id = s.Id,
+            name = s.Name,
+            waterType = s.WaterType,
+            region = s.Region,
+            zoneId = s.ZoneId,
+            lat = s.Location.Y,
+            lon = s.Location.X,
+        })
+        .ToListAsync());
+
+app.MapGet("/api/spots/{id}/conditions", async (Guid id, DateOnly date, KlevoDbContext db) =>
+{
+    var spot = await db.Spots.FindAsync(id);
+    if (spot is null)
+        return Results.NotFound();
+
+    var solunar = await db.SolunarDays
+        .Where(d => d.SpotId == id && d.Date == date)
+        .SingleOrDefaultAsync();
+
+    var weather = await db.WeatherObservations
+        .Where(o => o.SpotId == id && o.ObservedAt >= date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc)
+                                      && o.ObservedAt < date.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc))
+        .OrderBy(o => o.ObservedAt)
+        .Select(o => new
+        {
+            time = o.ObservedAt,
+            temperature = o.Temperature2m,
+            pressure = o.PressureMsl,
+            humidity = o.Humidity2m,
+            windSpeed = o.WindSpeed10m,
+            windDir = o.WindDir10m,
+            windGusts = o.WindGusts10m,
+            precip = o.Precip,
+            cloudCover = o.CloudCover,
+            snowDepth = o.SnowDepth,
+        })
+        .ToListAsync();
+
+    if (solunar is null && weather.Count == 0)
+        return Results.NotFound();
+
+    return Results.Ok(new
+    {
+        spotId = id,
+        date,
+        solunar = solunar is null ? null : new
+        {
+            moonPhase = solunar.MoonPhase,
+            moonIllumination = solunar.MoonIllumination,
+            moonRise = solunar.MoonRise,
+            moonSet = solunar.MoonSet,
+            moonTransit = solunar.MoonTransit,
+            lowerTransit = solunar.LowerTransit,
+            sunRise = solunar.SunRise,
+            sunSet = solunar.SunSet,
+            dawn = solunar.Dawn,
+            dusk = solunar.Dusk,
+            majorWindow = new { start = solunar.MajorStart, end = solunar.MajorEnd },
+            major2Window = new { start = solunar.Major2Start, end = solunar.Major2End },
+            minorWindow = new { start = solunar.MinorStart, end = solunar.MinorEnd },
+            minor2Window = new { start = solunar.Minor2Start, end = solunar.Minor2End },
+        },
+        weather,
     });
 });
 
