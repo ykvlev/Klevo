@@ -44,10 +44,15 @@ docs/       планы, исследования
 - `backend/src/Klevo.Api` — минимальное Web API (EF Core 10 + Npgsql 10 + PostGIS/NetTopologySuite)
 - Запуск: `dotnet run --project backend/src/Klevo.Api` → http://localhost:5178
 - Эндпоинты: `GET /health`, `GET /api/zones`, `GET /api/zones/{id}/rules`,
-  `GET /api/spots`, `GET /api/spots/{id}/conditions?date=YYYY-MM-DD`,
+  `GET /api/spots`, `GET /api/species`, `GET /api/spots/{id}/conditions?date=YYYY-MM-DD`,
   `GET /api/spots/{id}/forecast?date=YYYY-MM-DD`,
   `GET /api/spots/{id}/catches?from=&to=`, `POST /api/spots/{id}/catches`
   (улов = метка для ML)
+- Веб-страница журнала уловов: http://localhost:5178 (прогноз по точкам + форма записи улова)
+- ML-прогноз в `/forecast`: C# строит 24 признака (`MlFeatureBuilder`, паритет с `features.py`)
+  и считает скор через ONNX Runtime (`MlModelRunner`, `model.onnx`, версия `ml-v1`);
+  при отсутствии модели/данных — фолбэк на правило-базовые строки `predictions` (`rule-v1`).
+  Путь к модели: `ML:ModelPath` в конфиге или `wwwroot/models/model.onnx`
 - Тесты: `dotnet test backend/Klevo.slnx` (интеграционные + астро, нужен локальный PG)
 
 ## Пайплайн данных (`backend/src/Klevo.Ingest`)
@@ -70,3 +75,4 @@ docs/       планы, исследования
 - `onnx_export.py` — свой экспортёр TreeEnsemble→ONNX (skl2onnx/hummingbird
   не имеют wheels для Python 3.14)
 - `make_demo_labels.py` — демо-метки для проверки пайплайна (не для продакшена)
+- `parity_check.py [spot_id] [date]` — сверка скоров C# vs Python (ONNX Runtime, тот же вектор)
