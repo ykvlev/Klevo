@@ -139,13 +139,18 @@
     function renderForecast(fc) {
       const start = fc.bestStart || "—", end = fc.bestEnd || "—";
       const what = fc.modelVersion === "ml-v1" ? "ML-модель" : "правила";
+      const sat = (fc.satellite || []).map(s =>
+        `<div class="meta">• ${s.label}: <b>${s.value ?? "—"} ${s.unit}</b> — ${s.basis}${s.estimated ? ` (достоверность ${s.confidence}%)` : ""}</div>`).join("");
       return `<div class="score">
         <div class="num" style="color:${scoreClass(fc.score)}">${fc.score}</div>
         <div class="bar"><i style="width:${fc.score}%;background:${scoreClass(fc.score)}"></i></div>
       </div>
       <div class="meta">Дата: ${fc.date}</div>
       <div class="meta">Лучшее время: ${start} – ${end}</div>
-      <div class="meta">Источник: ${what} (${fc.modelVersion})</div>`;
+      <div class="meta">Источник: ${what} (${fc.modelVersion})</div>
+      <div class="meta" style="margin-top:8px">Достоверность данных: <b>${fc.dataConfidence ?? "—"}%</b></div>
+      ${sat}
+      <div class="meta" style="margin-top:8px;color:var(--muted)">${fc.dataNote || ""}</div>`;
     }
 
     async function loadCatches() {

@@ -1,6 +1,7 @@
 using Klevo.Api;
 using Klevo.Core.Data;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,6 +14,7 @@ builder.Services.AddDbContext<KlevoDbContext>(options =>
 
 builder.Services.AddSingleton<MlModelRunner>();
 builder.Services.AddScoped<MlFeatureBuilder>(_ => new MlFeatureBuilder(connectionString));
+builder.Services.AddScoped<SatelliteEstimator>();
 
 var app = builder.Build();
 
@@ -106,7 +108,8 @@ app.MapGet("/api/spots", async (KlevoDbContext db) =>
         })
         .ToListAsync());
 
-app.MapGet("/api/spots/{id}/conditions", async (Guid id, DateOnly date, KlevoDbContext db) =>
+app.MapGet("/api/spots/{id}/conditions", async (
+    Guid id, DateOnly date, KlevoDbContext db, SatelliteEstimator sat) =>
 {
     var spot = await db.Spots.FindAsync(id);
     if (spot is null)
@@ -152,6 +155,40 @@ app.MapGet("/api/spots/{id}/conditions", async (Guid id, DateOnly date, KlevoDbC
     if (solunar is null && weather.Count == 0 && satellite.Count == 0)
         return Results.NotFound();
 
+    await using var conn = new NpgsqlConnection(connectionString);
+    await conn.OpenAsync();
+    var features = new (string Column, string Label, string Unit, string[] Sources, int MaxDays, bool Model)[]
+    {
+        ("sst_c", "Температура воды", "°C", SatelliteEstimator.SstSources, SatelliteEstimator.SstMaxDays, true),
+        ("chla_mgm3", "Хлорофилл", "мг/м³", SatelliteEstimator.ChlaSources, SatelliteEstimator.ChlaMaxDays, true),
+        ("bottom_t_c", "Температура у дна", "°C", SatelliteEstimator.PhySources, SatelliteEstimator.OceanMaxDays, false),
+        ("mlotst_m", "Глубина перемешивания", "м", SatelliteEstimator.PhySources, SatelliteEstimator.OceanMaxDays, false),
+        ("salinity_psu", "Солёность", "PSU", SatelliteEstimator.PhySources, SatelliteEstimator.OceanMaxDays, false),
+    };
+    var summary = new List<object>();
+    foreach (var f in features)
+    {
+        var e = await sat.EstimateAsync(conn, id, date, f.Column, f.Sources, f.MaxDays);
+        if (e is null)
+            continue;
+        summary.Add(new
+        {
+            feature = f.Column,
+            label = f.Label,
+            value = e.Value,
+            unit = f.Unit,
+            source = e.Source,
+            observedAt = e.ObservedAt,
+            estimated = e.Estimated,
+            confidence = e.Confidence,
+            basis = e.Basis,
+            usedInModel = f.Model,
+        });
+    }
+    var sources = (await sat.SourcesAsync(conn, id))
+        .Select(s => new { source = s.Key, label = s.Label, lastObservation = s.LastObservation, staleDays = s.StaleDays, status = s.Status })
+        .ToList();
+
     return Results.Ok(new
     {
         spotId = id,
@@ -175,6 +212,8 @@ app.MapGet("/api/spots/{id}/conditions", async (Guid id, DateOnly date, KlevoDbC
         },
         weather,
         satellite,
+        satelliteSummary = summary,
+        sources,
     });
 });
 
@@ -262,7 +301,8 @@ app.MapPost("/api/spots/{id}/catches", async (Guid id, CreateCatchRequest req, K
 });
 
 app.MapGet("/api/spots/{id}/forecast", async (
-    Guid id, DateOnly? date, KlevoDbContext db, MlFeatureBuilder features, MlModelRunner model) =>
+    Guid id, DateOnly? date, KlevoDbContext db, MlFeatureBuilder features, MlModelRunner model,
+    SatelliteEstimator sat) =>
 {
     var spot = await db.Spots.FindAsync(id);
     if (spot is null)
@@ -306,6 +346,9 @@ app.MapGet("/api/spots/{id}/forecast", async (
     if (score is null)
         return Results.NotFound();
 
+    var (sources, satellite, dataConfidence, dataNote) =
+        await BuildDataProvenanceAsync(id, day, db, sat, connectionString);
+
     return Results.Ok(new
     {
         spotId = id,
@@ -314,8 +357,104 @@ app.MapGet("/api/spots/{id}/forecast", async (
         bestStart = bestStart?.ToString("HH:mm"),
         bestEnd = bestEnd?.ToString("HH:mm"),
         modelVersion = version,
+        dataConfidence,
+        sources,
+        satellite,
+        dataNote,
     });
 });
+
+/// <summary>Собирает происхождение данных прогноза, оценки условий и достоверность.</summary>
+static async Task<(List<object> Sources, List<object> Satellite, int Confidence, string Note)>
+    BuildDataProvenanceAsync(Guid spotId, DateOnly day, KlevoDbContext db,
+        SatelliteEstimator sat, string connectionString)
+{
+    await using var conn = new NpgsqlConnection(connectionString);
+    await conn.OpenAsync();
+
+    var sst = await sat.EstimateAsync(conn, spotId, day, "sst_c",
+        SatelliteEstimator.SstSources, SatelliteEstimator.SstMaxDays);
+    var chla = await sat.EstimateAsync(conn, spotId, day, "chla_mgm3",
+        SatelliteEstimator.ChlaSources, SatelliteEstimator.ChlaMaxDays);
+
+    var sources = new List<object>();
+    foreach (var s in await sat.SourcesAsync(conn, spotId))
+        sources.Add(new { source = s.Key, label = s.Label, lastObservation = s.LastObservation, staleDays = s.StaleDays, status = s.Status });
+
+    var lastWeather = await db.WeatherObservations
+        .Where(o => o.SpotId == spotId)
+        .Select(o => (DateOnly?)DateOnly.FromDateTime(o.ObservedAt))
+        .OrderByDescending(o => o)
+        .FirstOrDefaultAsync();
+    var weatherStale = lastWeather is null ? int.MaxValue : day.DayNumber - lastWeather.Value.DayNumber;
+    var weatherStaleDisplay = weatherStale == int.MaxValue ? weatherStale : Math.Max(0, weatherStale);
+    sources.Add(new
+    {
+        source = "openmeteo",
+        label = "Open-Meteo (погода)",
+        lastObservation = lastWeather,
+        staleDays = weatherStaleDisplay,
+        status = weatherStale <= 3 ? "ok" : weatherStale <= 30 ? "warn" : "stale",
+    });
+
+    var hasSolunar = await db.SolunarDays.AnyAsync(d => d.SpotId == spotId && d.Date == day);
+    sources.Add(new
+    {
+        source = "solunar",
+        label = "Астрономия (солунар)",
+        lastObservation = (DateOnly?)day,
+        staleDays = 0,
+        status = hasSolunar ? "ok" : "stale",
+    });
+
+    var satellite = new List<object>();
+    if (sst is not null)
+        satellite.Add(new
+        {
+            feature = "sst_c",
+            label = "Температура воды",
+            value = sst.Value,
+            unit = "°C",
+            source = sst.Source,
+            observedAt = sst.ObservedAt,
+            estimated = sst.Estimated,
+            confidence = sst.Confidence,
+            basis = sst.Basis,
+        });
+    if (chla is not null)
+        satellite.Add(new
+        {
+            feature = "chla_mgm3",
+            label = "Хлорофилл",
+            value = chla.Value,
+            unit = "мг/м³",
+            source = chla.Source,
+            observedAt = chla.ObservedAt,
+            estimated = chla.Estimated,
+            confidence = chla.Confidence,
+            basis = chla.Basis,
+        });
+
+    var confidences = new List<int>();
+    if (sst is not null) confidences.Add(sst.Confidence);
+    if (chla is not null) confidences.Add(chla.Confidence);
+    confidences.Add(weatherStale <= 3 ? 90 : weatherStale <= 30 ? 75 : 60);
+    confidences.Add(hasSolunar ? 95 : 70);
+    var confidence = (int)Math.Round(confidences.Average());
+
+    var parts = new List<string>();
+    if (sst is not null)
+        parts.Add($"температура воды — {sst.Basis}{(sst.Estimated ? $" (достоверность {sst.Confidence}%)" : "")}");
+    if (chla is not null)
+        parts.Add($"хлорофилл — {chla.Basis}{(chla.Estimated ? $" (достоверность {chla.Confidence}%)" : "")}");
+    parts.Add(weatherStale <= 3
+        ? "погода — прогноз Open-Meteo"
+        : "погода — нет актуальных данных");
+    parts.Add(hasSolunar ? "солунар — расчётный" : "солунар — нет данных");
+    var note = $"Данные: {string.Join("; ", parts)}. Достоверность данных ~{confidence}%.";
+
+    return (sources, satellite, confidence, note);
+}
 
 app.Run();
 
