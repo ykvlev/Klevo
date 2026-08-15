@@ -1,3 +1,4 @@
+using Klevo.Api;
 using Klevo.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
@@ -10,7 +11,20 @@ var connectionString = builder.Configuration.GetConnectionString("Default")
 builder.Services.AddDbContext<KlevoDbContext>(options =>
     options.UseNpgsql(connectionString, npgsql => npgsql.UseNetTopologySuite()));
 
+builder.Services.AddSingleton<MlModelRunner>();
+builder.Services.AddScoped<MlFeatureBuilder>(_ => new MlFeatureBuilder(connectionString));
+
 var app = builder.Build();
+
+app.UseDefaultFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        if (ctx.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+            ctx.Context.Response.ContentType = "text/html; charset=utf-8";
+    },
+});
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
@@ -164,6 +178,18 @@ app.MapGet("/api/spots/{id}/conditions", async (Guid id, DateOnly date, KlevoDbC
     });
 });
 
+app.MapGet("/api/species", async (KlevoDbContext db) =>
+    await db.Species
+        .OrderBy(s => s.NameRu)
+        .Select(s => new
+        {
+            id = s.Id,
+            nameRu = s.NameRu,
+            nameLatin = s.NameLatin,
+            isCrustacean = s.IsCrustacean,
+        })
+        .ToListAsync());
+
 app.MapGet("/api/spots/{id}/catches", async (Guid id, DateOnly? from, DateOnly? to, KlevoDbContext db) =>
 {
     var spot = await db.Spots.FindAsync(id);
@@ -235,7 +261,8 @@ app.MapPost("/api/spots/{id}/catches", async (Guid id, CreateCatchRequest req, K
     });
 });
 
-app.MapGet("/api/spots/{id}/forecast", async (Guid id, DateOnly? date, KlevoDbContext db) =>
+app.MapGet("/api/spots/{id}/forecast", async (
+    Guid id, DateOnly? date, KlevoDbContext db, MlFeatureBuilder features, MlModelRunner model) =>
 {
     var spot = await db.Spots.FindAsync(id);
     if (spot is null)
@@ -245,17 +272,48 @@ app.MapGet("/api/spots/{id}/forecast", async (Guid id, DateOnly? date, KlevoDbCo
     var prediction = await db.Predictions
         .Where(p => p.SpotId == id && p.Date == day)
         .SingleOrDefaultAsync();
-    if (prediction is null)
+
+    int? score = null;
+    var version = "rule-v1";
+    TimeOnly? bestStart = null;
+    TimeOnly? bestEnd = null;
+
+    if (model.IsAvailable)
+    {
+        try
+        {
+            var vector = await features.BuildAsync(id, day);
+            var solunar = await features.LoadSolunarForWindowAsync(id, day);
+            var prob = model.Predict(vector);
+            score = (int)Math.Round(Math.Clamp(prob * 100, 0, 100), 0);
+            version = MlFeatureBuilder.ModelVersion;
+            (bestStart, bestEnd) = features.BestWindow(day, solunar);
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "ML forecast failed, falling back to rule-v1");
+        }
+    }
+
+    if (score is null && prediction is not null)
+    {
+        score = prediction.Score;
+        version = prediction.ModelVersion;
+        bestStart = prediction.BestStart;
+        bestEnd = prediction.BestEnd;
+    }
+
+    if (score is null)
         return Results.NotFound();
 
     return Results.Ok(new
     {
         spotId = id,
-        date = prediction.Date,
-        score = prediction.Score,
-        bestStart = prediction.BestStart?.ToString("HH:mm"),
-        bestEnd = prediction.BestEnd?.ToString("HH:mm"),
-        modelVersion = prediction.ModelVersion,
+        date = day,
+        score,
+        bestStart = bestStart?.ToString("HH:mm"),
+        bestEnd = bestEnd?.ToString("HH:mm"),
+        modelVersion = version,
     });
 });
 

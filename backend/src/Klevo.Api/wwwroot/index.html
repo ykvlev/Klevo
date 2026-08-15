@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Klevo — журнал уловов</title>
+  <style>
+    :root { --bg:#0e1726; --card:#16233a; --line:#26385a; --txt:#e7eef7; --muted:#8ba3c2;
+            --acc:#3aa0ff; --good:#2ecc71; --mid:#f1c40f; --bad:#e74c3c; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg);
+           color:var(--txt); line-height:1.45; }
+    header { padding:16px 20px; border-bottom:1px solid var(--line); background:var(--card); }
+    header h1 { margin:0; font-size:20px; } header small { color:var(--muted); }
+    main { max-width:1000px; margin:0 auto; padding:20px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    @media (max-width:820px) { .grid { grid-template-columns:1fr; } }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+    .card h2 { margin:0 0 12px; font-size:16px; }
+    label { display:block; margin:10px 0 4px; color:var(--muted); font-size:13px; }
+    select, input, textarea { width:100%; padding:9px 10px; border-radius:8px;
+      border:1px solid var(--line); background:#0d1a2c; color:var(--txt); font-size:14px; }
+    button { cursor:pointer; border:0; border-radius:8px; padding:10px 16px; font-size:14px;
+      background:var(--acc); color:#fff; margin-top:12px; }
+    button:hover { filter:brightness(1.1); }
+    button.ghost { background:transparent; border:1px solid var(--line); color:var(--muted); }
+    .row2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .score { display:flex; align-items:center; gap:14px; margin:10px 0 4px; }
+    .score .num { font-size:38px; font-weight:700; }
+    .bar { flex:1; height:12px; border-radius:6px; background:#0d1a2c; overflow:hidden; }
+    .bar i { display:block; height:100%; border-radius:6px; }
+    .meta { color:var(--muted); font-size:13px; margin:4px 0; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); }
+    th { color:var(--muted); font-weight:600; }
+    .empty { color:var(--muted); font-size:13px; padding:8px 0; }
+    #msg { margin:10px 0 0; font-size:13px; min-height:18px; }
+    #msg.ok { color:var(--good); } #msg.err { color:var(--bad); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Klevo · журнал уловов</h1>
+    <small>Пилотный прогноз клёва и запись результатов</small>
+  </header>
+  <main>
+    <div class="grid">
+      <div>
+        <div class="card">
+          <h2>Точка</h2>
+          <label for="spot">Водоём / точка</label>
+          <select id="spot" onchange="onSpot()"><option value="">Загрузка…</option></select>
+        </div>
+        <div class="card" id="forecastCard" hidden>
+          <h2>Прогноз клёва</h2>
+          <div id="forecast"></div>
+        </div>
+        <div class="card">
+          <h2>Записать улов</h2>
+          <div class="row2">
+            <div>
+              <label for="caughtDate">Дата</label>
+              <input type="date" id="caughtDate">
+            </div>
+            <div>
+              <label for="caughtTime">Время</label>
+              <input type="time" id="caughtTime" value="12:00">
+            </div>
+          </div>
+          <label for="species">Вид</label>
+          <select id="species"><option value="">—</option></select>
+          <div class="row2">
+            <div><label for="weight">Вес, кг</label><input type="number" id="weight" min="0" step="0.01"></div>
+            <div><label for="length">Длина, см</label><input type="number" id="length" min="0" step="1"></div>
+          </div>
+          <label for="notes">Примечание</label>
+          <textarea id="notes" rows="2"></textarea>
+          <button onclick="saveCatch()">Сохранить улов</button>
+          <div id="msg"></div>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <h2>История уловов</h2>
+          <div id="catches"><div class="empty">Выберите точку</div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+  <script>
+    let spots = [], species = [];
+
+    async function get(url) {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+
+    function localISO(dt) {
+      const p = n => String(n).padStart(2, "0");
+      return dt.getFullYear() + "-" + p(dt.getMonth() + 1) + "-" + p(dt.getDate());
+    }
+
+    async function init() {
+      try {
+        spots = await get("/api/spots");
+        const sel = document.getElementById("spot");
+        sel.innerHTML = spots.map(s =>
+          `<option value="${s.id}">${s.name}</option>`).join("");
+        species = await get("/api/species");
+        document.getElementById("species").innerHTML = species.map(s =>
+          `<option value="${s.id}">${s.nameRu}</option>`).join("");
+        const d = new Date();
+        document.getElementById("caughtDate").value = localISO(d);
+        sel.onchange();
+      } catch (e) { showMsg("Не удалось загрузить данные: " + e.message, true); }
+    }
+
+    let currentSpot = null;
+    async function onSpot() {
+      const id = document.getElementById("spot").value;
+      if (!id) return;
+      currentSpot = id;
+      const f = document.getElementById("forecastCard");
+      try {
+        const fc = await get("/api/spots/" + id + "/forecast");
+        f.hidden = false;
+        document.getElementById("forecast").innerHTML = renderForecast(fc);
+        loadCatches();
+      } catch (e) {
+        f.hidden = false;
+        document.getElementById("forecast").innerHTML =
+          '<div class="empty">Нет данных прогноза</div>';
+      }
+    }
+
+    function scoreClass(s) { return s >= 70 ? "var(--good)" : s >= 50 ? "var(--mid)" : "var(--bad)"; }
+
+    function renderForecast(fc) {
+      const start = fc.bestStart || "—", end = fc.bestEnd || "—";
+      const what = fc.modelVersion === "ml-v1" ? "ML-модель" : "правила";
+      return `<div class="score">
+        <div class="num" style="color:${scoreClass(fc.score)}">${fc.score}</div>
+        <div class="bar"><i style="width:${fc.score}%;background:${scoreClass(fc.score)}"></i></div>
+      </div>
+      <div class="meta">Дата: ${fc.date}</div>
+      <div class="meta">Лучшее время: ${start} – ${end}</div>
+      <div class="meta">Источник: ${what} (${fc.modelVersion})</div>`;
+    }
+
+    async function loadCatches() {
+      const el = document.getElementById("catches");
+      try {
+        const rows = await get("/api/spots/" + currentSpot + "/catches");
+        if (!rows.length) { el.innerHTML = '<div class="empty">Уловов пока нет</div>'; return; }
+        el.innerHTML = `<table>
+          <tr><th>Когда</th><th>Вид</th><th>Вес</th><th>Длина</th><th>Примечание</th></tr>
+          ${rows.map(r => `<tr>
+            <td>${new Date(r.caughtAt).toLocaleString("ru-RU")}</td>
+            <td>${r.speciesName || "—"}</td>
+            <td>${r.weightKg ?? "—"}</td>
+            <td>${r.lengthCm ?? "—"}</td>
+            <td>${r.notes || ""}</td></tr>`).join("")}
+        </table>`;
+      } catch (e) { el.innerHTML = '<div class="empty">Ошибка загрузки</div>'; }
+    }
+
+    async function saveCatch() {
+      const id = currentSpot;
+      if (!id) return showMsg("Сначала выберите точку", true);
+      const date = document.getElementById("caughtDate").value;
+      const time = document.getElementById("caughtTime").value;
+      const body = {
+        speciesId: document.getElementById("species").value || null,
+        weightKg: document.getElementById("weight").value || null,
+        lengthCm: document.getElementById("length").value || null,
+        caughtAt: date + "T" + time + ":00",
+        notes: document.getElementById("notes").value || null
+      };
+      try {
+        const r = await fetch("/api/spots/" + id + "/catches", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+        if (!r.ok) throw new Error(await r.text());
+        showMsg("Улов сохранён");
+        document.getElementById("weight").value = "";
+        document.getElementById("length").value = "";
+        document.getElementById("notes").value = "";
+        loadCatches();
+      } catch (e) { showMsg("Ошибка: " + e.message, true); }
+    }
+
+    function showMsg(text, isErr) {
+      const m = document.getElementById("msg");
+      m.textContent = text;
+      m.className = isErr ? "err" : "ok";
+    }
+
+    init();
+  </script>
+</body>
+</html>
