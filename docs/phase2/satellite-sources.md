@@ -61,9 +61,12 @@ CMEMS озёра не покрывает. Для Ладоги нужны L3 пр
       UNIQUE (spot_id, observed_at, source)
   );
   ```
-- `fetch_nasa.py` (MODIS Aqua L3SMI SST для Ладоги) — скачивание по `getfile`,
-  фильтр `qual_sst<=1`, ближайшая валидная ячейка в радиусе ≤15 км,
-  источник `nasa_modis_aqua`.
+- `fetch_nasa.py` (MODIS Aqua L3SMI SST для Ладоги) — скачивание с `--mirror podaac`
+  (по умолчанию) или `--mirror ocean` (getfile OB.DAAC); фильтр `qual_sst<=1`,
+  ближайшая валидная ячейка в радиусе ≤15 км, источник `nasa_modis_aqua`.
+- PODAAC-зеркало: `archive.podaac.earthdata.nasa.gov` (коллекция
+  `MODIS_AQUA_L3_SST_THERMAL_DAILY_4KM_DAYTIME_V2019.0`, CloudFront по EDL-токену);
+  нужно, т.к. `oceandata.sci.gsfc.nasa.gov` перестал отвечать (TCP проходит, TLS/HTTP виснет).
 
 ## Доступ к данным (проверено)
 
@@ -91,7 +94,9 @@ CMEMS озёра не покрывает. Для Ладоги нужны L3 пр
 - [x] `fetch_cmems.py`: выгрузка + upsert в `satellite_obs` (проверено, идемпотентно)
 - [x] Бэкфилл CMEMS 2023-01-01 … 2026-05-31: 2494 записи (Лахта, Кургальский)
 - [x] Спутниковые данные в `/api/spots/{id}/conditions` (поле `satellite`)
-- [x] `fetch_nasa.py` (MODIS Aqua L3SMI SST) — Ладога покрыта, 2215 записей
+- [x] `fetch_nasa.py` (MODIS Aqua L3SMI SST) — Ладога покрыта, 2513 записей
+- [x] Дозалив NASA за лето 2026 (2026-05-27…08-13) через PODAAC-зеркало — `sst_c` свежий
+      (до 08-13; 08-14/15 ещё не выложены, 08-10 нет гранулы)
 - [x] CMEMS Chl-a (`cmems_mod_bal_bgc_my_P1M-m`, `--bgc`) — 65 записей (Лахта, Кургальский)
 
 ## Учётные записи — чек-лист

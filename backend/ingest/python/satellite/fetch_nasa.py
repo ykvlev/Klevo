@@ -6,9 +6,14 @@
 внутренние воды. Для точек вне валидных пикселей ищется ближайшая ячейка
 в радиусе max_km с качеством qual_sst <= max_qual (0 = best, 1 = good).
 
+Источники (--mirror):
+    podaac  — зеркало PODAAC Earthdata Cloud (archive.podaac.earthdata.nasa.gov),
+              работает, когда oceandata.sci.gsfc.nasa.gov недоступен.
+    ocean   — оригинальный getfile OB.DAAC (oceandata.sci.gsfc.nasa.gov).
+
 Пример:
     python fetch_nasa.py --from 2025-08-01 --to 2025-08-31
-    python fetch_nasa.py --from 2023-01-01 --to 2026-05-30
+    python fetch_nasa.py --mirror podaac --from 2026-05-27 --to 2026-08-15
 """
 from __future__ import annotations
 
@@ -24,7 +29,9 @@ import psycopg2
 import requests
 import xarray as xr
 
-BASE_URL = "https://oceandata.sci.gsfc.nasa.gov/getfile"
+LEGACY_URL = "https://oceandata.sci.gsfc.nasa.gov/getfile"
+PODAAC_BASE = ("https://archive.podaac.earthdata.nasa.gov/podaac-ops-cumulus-protected/"
+               "MODIS_AQUA_L3_SST_THERMAL_DAILY_4KM_DAYTIME_V2019.0")
 SOURCE = "nasa_modis_aqua"
 KM_PER_DEG_LAT = 111.0
 MAX_KM = 15.0
@@ -88,6 +95,8 @@ def main() -> None:
     ap.add_argument("--to", dest="d1", required=True, help="конец периода YYYY-MM-DD")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--max-km", type=float, default=MAX_KM)
+    ap.add_argument("--mirror", choices=("ocean", "podaac"), default="podaac",
+                    help="источник файлов (default: podaac)")
     args = ap.parse_args()
 
     load_dotenv()
@@ -114,25 +123,34 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         while day <= d1:
-            fn = f"AQUA_MODIS.{day.strftime('%Y%m%d')}.L3m.DAY.SST.sst.4km.nc"
-            url = f"{BASE_URL}/{fn}"
             n_days += 1
-            try:
-                r = sess.get(url, headers=headers, timeout=90)
-            except requests.RequestException as exc:
-                print(f"  {day}: сеть ({exc}); пропуск")
-                day += timedelta(days=1)
-                continue
-            if r.status_code == 404:
-                day += timedelta(days=1)
-                continue
-            if r.status_code != 200:
-                print(f"  {day}: HTTP {r.status_code}; пропуск")
+            fn = f"AQUA_MODIS.{day.strftime('%Y%m%d')}.L3m.DAY.SST.sst.4km"
+            if args.mirror == "ocean":
+                urls = [f"{LEGACY_URL}/{fn}.nc"]
+            else:
+                urls = [
+                    f"{PODAAC_BASE}/{fn}.nc",
+                    f"{PODAAC_BASE}/{fn}.NRT.nc",
+                ]
+            path = content = None
+            for url in urls:
+                try:
+                    r = sess.get(url, headers=headers, timeout=90)
+                except requests.RequestException as exc:
+                    print(f"  {day}: сеть ({exc}); пробую следующий источник")
+                    continue
+                if r.status_code == 200:
+                    content = r.content
+                    break
+                if r.status_code == 404:
+                    continue
+                print(f"  {day}: HTTP {r.status_code} ({url}); пробую следующий источник")
+            if content is None:
                 day += timedelta(days=1)
                 continue
             n_found += 1
-            path = tmp / fn
-            path.write_bytes(r.content)
+            path = tmp / f"{fn}{'.NRT.nc' if '.NRT' in r.url else '.nc'}"
+            path.write_bytes(content)
             try:
                 ds = xr.open_dataset(path)
                 with ds:

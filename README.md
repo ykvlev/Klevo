@@ -24,7 +24,8 @@ docs/       планы, исследования
 - [x] Фаза 1 (API) — ASP.NET Core 10, EF Core + Npgsql, эндпоинты правил
 - [x] Фаза 2 (база) — пайплайн: погода (Open-Meteo) + солунар (Astronomy Engine), пилотные точки
 - [x] Фаза 2 (спутник, CMEMS) — SST/температура/солёность по морским точкам
-  (см. `docs/phase2/satellite-sources.md`); NASA (Ладога) — следующий шаг
+  (см. `docs/phase2/satellite-sources.md`); NASA (Ладога) — MODIS Aqua SST через
+  PODAAC-зеркало (`fetch_nasa.py --mirror podaac`), свежесть до 2026-08-13
 - [x] Фаза 3 (rule-v1) — прогноз клёва: `ml/features.py` (матрица признаков), `ml/score.py`
   (правило-скор 0–100 → `predictions`), `ml/train.py` (LightGBM→ONNX, ждёт метки из `catches`),
   `GET /api/spots/{id}/forecast`; ML-модель — следующий шаг
