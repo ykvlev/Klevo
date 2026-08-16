@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
 namespace Klevo.Api.Tests;
@@ -110,6 +112,40 @@ public class ApiIntegrationTests(WebApplicationFactory<Program> factory)
             using var cmd = new NpgsqlCommand("DELETE FROM catches WHERE id = @id", conn);
             cmd.Parameters.AddWithValue("@id", createdId);
             cmd.ExecuteNonQuery();
+        }
+    }
+
+    [Fact]
+    public async Task Forecast_ReturnsScoreAndWindowWithinRange()
+    {
+        var response = await _client.GetAsync(
+            "/api/spots/a1111111-0000-4000-8000-000000000001/forecast?date=2026-08-16");
+        response.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var score = doc.RootElement.GetProperty("score").GetInt32();
+        Assert.InRange(score, 0, 100);
+        Assert.False(string.IsNullOrEmpty(doc.RootElement.GetProperty("modelVersion").GetString()));
+        Assert.Matches(new Regex(@"^\d{2}:\d{2}$"),
+            doc.RootElement.GetProperty("bestStart").GetString());
+        Assert.Matches(new Regex(@"^\d{2}:\d{2}$"),
+            doc.RootElement.GetProperty("bestEnd").GetString());
+    }
+
+    [Fact]
+    public async Task MlFeatureBuilder_WeekdayMatchesPandasSemantics()
+    {
+        var builder = factory.Services.CreateScope()
+            .ServiceProvider.GetRequiredService<MlFeatureBuilder>();
+        var spotId = Guid.Parse("a1111111-0000-4000-8000-000000000001");
+
+        for (var i = 0; i < 7; i++)
+        {
+            var date = new DateOnly(2026, 8, 10).AddDays(i);
+            var vector = await builder.BuildAsync(spotId, date);
+            var expected = ((int)date.DayOfWeek + 6) % 7; // понедельник=0 … воскресенье=6
+            Assert.InRange(vector[22], 0, 6);
+            Assert.Equal(expected, vector[22]);
         }
     }
 

@@ -63,7 +63,7 @@ public sealed class MlFeatureBuilder(string connectionString)
             : float.NaN;
         v[20] = date.DayOfYear;
         v[21] = date.Month;
-        v[22] = (int)date.DayOfWeek - 1; // понедельник = 0, как pandas weekday
+        v[22] = ((int)date.DayOfWeek + 6) % 7; // понедельник = 0, воскресенье = 6, как pandas weekday
         v[23] = date.Month switch
         {
             12 or 1 or 2 => 0,
