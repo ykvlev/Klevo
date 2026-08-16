@@ -29,7 +29,10 @@ docs/       планы, исследования
 - [x] Фаза 3 (rule-v1) — прогноз клёва: `ml/features.py` (матрица признаков), `ml/score.py`
   (правило-скор 0–100 → `predictions`), `ml/train.py` (LightGBM→ONNX, ждёт метки из `catches`),
   `GET /api/spots/{id}/forecast`; ML-модель — следующий шаг
-- [ ] Фаза 4 — fish ID + правила
+- [x] Фаза 4 — fish ID + правила: инспектор правил (виды/запреты/сезоны, алиасы, минимальные
+  размеры и нормы) + классификатор вида по фото (`MobileNetV3-Small`, 10 пилотных видов,
+  top-1 0.74 / top-3 0.90 на тесте; см. `docs/phase4/fish-id.md`); загрузка фото, top-3 кандидатов,
+  привязка фото к записи улова
 - [ ] Фаза 4.5 — продакшн-веб: карта с точками, дизайн, мобильная адаптация (пощупать как продукт)
 - [ ] Фаза 5 — мобильное приложение (Flutter)
 - [ ] Фаза 6 — запуск
@@ -49,13 +52,22 @@ docs/       планы, исследования
   `GET /api/spots`, `GET /api/species`, `GET /api/spots/{id}/conditions?date=YYYY-MM-DD`,
   `GET /api/spots/{id}/forecast?date=YYYY-MM-DD`,
   `GET /api/spots/{id}/catches?from=&to=`, `POST /api/spots/{id}/catches`
-  (улов = метка для ML)
+  (улов = метка для ML), `POST /api/uploads` (multipart JPG/PNG/WebP ≤10 МБ → `wwwroot/uploads/`),
+  `POST /api/fish-id` (multipart `file` или JSON `{dataUrl}` → top-3 вида с уверенностью;
+  503, если модель не развёрнута)
 - Веб-страница журнала уловов: http://localhost:5178 (прогноз по точкам + форма записи улова)
 - ML-прогноз в `/forecast`: C# строит 24 признака (`MlFeatureBuilder`, паритет с `features.py`)
   и считает скор через ONNX Runtime (`MlModelRunner`, `model.onnx`, версия `ml-v1`);
   при отсутствии модели/данных — фолбэк на правило-базовые строки `predictions` (`rule-v1`).
   Путь к модели: `ML:ModelPath` в конфиге или `wwwroot/models/model.onnx`
 - Тесты: `dotnet test backend/Klevo.slnx` (интеграционные + астро, нужен локальный PG)
+
+## Fish ID (`backend/ingest/python/fishid`, venv `.venv`)
+- `download_wikimedia.py` — сбор датасета с Wikimedia Commons (640px thumbs, ретраи 429)
+- `train.py` — fine-tune `MobileNetV3-Small` (`--arch mobilenet_v3_large`), split 80/10/10, top-1/top-3
+- `onnx_export.py` — экспорт ONNX с предобработкой в графе (вход NHWC 0–255, `--order` = порядок классов обучения)
+- Модель `wwwroot/models/fishid/{model.onnx, model.onnx.data, classes.txt}` — локальная (gitignored);
+  C#-препроцессинг повторяет torchvision eval (Resize 256 + CenterCrop 224)
 
 ## Пайплайн данных (`backend/src/Klevo.Ingest`)
 - `solunar --days N | --from D --to T` — фаза луны, освещённость, восход/заход,
