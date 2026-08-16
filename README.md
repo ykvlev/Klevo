@@ -89,9 +89,19 @@ docs/       планы, исследования
 ## ML (`backend/ingest/python/ml`, venv `.venv`, Python 3.14)
 - `features.py` — ежедневная матрица признаков (погода + солунар + спутник + lag)
 - `score.py` — правило-базовый скор 0–100 → `predictions` (model_version `rule-v1`)
-- `train.py --features X.csv --labels Y.csv` — LightGBM → ONNX (паритет 1e-5);
+- `train.py --features X.csv [--deploy <wwwroot/models>]` — LightGBM → ONNX (паритет 1e-5);
   без меток завершается корректно; реальные метки = уловы из `catches`
 - `onnx_export.py` — свой экспортёр TreeEnsemble→ONNX (skl2onnx/hummingbird
   не имеют wheels для Python 3.14)
 - `make_demo_labels.py` — демо-метки для проверки пайплайна (не для продакшена)
 - `parity_check.py [spot_id] [date]` — сверка скоров C# vs Python (ONNX Runtime, тот же вектор)
+
+### Цикл ретраина ml-v1
+1. Накапливайте реальные уловы через `POST /api/spots/{id}/catches` (журнал на сайте) —
+   демо-метки в обучение не попадают, метки читаются только из `catches`.
+2. Соберите матрицу признаков за весь период:
+   `python features.py --from 2023-01-01 --to <сегодня> --out features_<to>.csv`
+3. Обучите и разверните модель одной командой:
+   `python train.py --features features_<to>.csv --deploy ../src/Klevo.Api/wwwroot/models`
+   (модель появится в `wwwroot/models/model.onnx`, C# подхватит её как `ml-v1`).
+4. Сверьте паритет: `python parity_check.py <spot_id> <date>` — C# и Python должны совпасть.

@@ -6,15 +6,19 @@
 
 Пока catches пуст — скрипт сообщает, что меток нет, и завершается без обучения.
 Как появятся уловы (или вы подадите CSV через --labels), обучение заработает:
+    python features.py --from 2023-01-01 --to 2026-08-20 --out features_2023_2026.csv
     python train.py --features features_2023_2026.csv --out-dir models
     python train.py --labels catches_demo.csv
+    python train.py --features X.csv --deploy ../src/Klevo.Api/wwwroot/models
 
 Выход: models/model.lgb (LightGBM), models/model.onnx (ONNX для C#/ONNX Runtime).
+--deploy копирует model.onnx в wwwroot API (там его подхватит MlModelRunner).
 """
 from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -57,6 +61,9 @@ def main() -> None:
     ap.add_argument("--labels", default=None,
                     help="CSV меток (spot_id,date,catches); иначе — из таблицы catches")
     ap.add_argument("--out-dir", default="models")
+    ap.add_argument("--deploy", default=None,
+                    help="куда скопировать model.onnx после экспорта "
+                         "(например ../src/Klevo.Api/wwwroot/models)")
     ap.add_argument("--test-after", default="2026-01-01", help="временной сплит")
     ap.add_argument("--spots", nargs="*")
     args = ap.parse_args()
@@ -129,6 +136,12 @@ def main() -> None:
 
         lgbm_to_onnx(model, str(out / "model.onnx"), MODEL_COLS)
         print(f"ONNX: {out / 'model.onnx'}")
+
+        if args.deploy:
+            deploy_dir = Path(args.deploy)
+            deploy_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(out / "model.onnx", deploy_dir / "model.onnx")
+            print(f"ONNX развёрнут: {deploy_dir / 'model.onnx'} (ml-v1)")
 
         sess = ort.InferenceSession(str(out / "model.onnx"),
                                     providers=["CPUExecutionProvider"])
