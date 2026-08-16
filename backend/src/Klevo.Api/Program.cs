@@ -345,6 +345,76 @@ app.MapPost("/api/fish-id", async (HttpRequest request, FishIdService fishId, Kl
     });
 });
 
+app.MapGet("/api/catches/feed", async (
+    int? limit, KlevoDbContext db, RuleChecker checker) =>
+{
+    var take = Math.Clamp(limit ?? 50, 1, 200);
+    var rows = await db.Catches
+        .OrderByDescending(c => c.CaughtAt)
+        .Take(take)
+        .Select(c => new
+        {
+            c.Id,
+            c.SpotId,
+            c.SpeciesId,
+            c.SpeciesName,
+            c.WeightKg,
+            c.LengthCm,
+            c.PhotoUrl,
+            c.CaughtAt,
+            c.Notes,
+        })
+        .ToListAsync();
+
+    var spots = await db.Spots
+        .Where(s => rows.Select(r => r.SpotId).Distinct().Contains(s.Id))
+        .Select(s => new { s.Id, s.Name, s.WaterType })
+        .ToDictionaryAsync(s => s.Id);
+
+    var items = new List<object>();
+    foreach (var r in rows)
+    {
+        spots.TryGetValue(r.SpotId ?? Guid.Empty, out var spot);
+        RuleCheckOutcome? check = null;
+        try
+        {
+            var outcome = await checker.CheckAsync(db, new RuleCheckRequest(
+                r.SpotId ?? Guid.Empty, r.SpeciesId, r.SpeciesName,
+                r.WeightKg, r.LengthCm, r.CaughtAt));
+            if (outcome.Found)
+                check = outcome;
+        }
+        catch
+        {
+            // лента не должна падать из-за недоступной проверки правил
+        }
+
+        items.Add(new
+        {
+            id = r.Id,
+            spotId = r.SpotId,
+            spotName = spot?.Name,
+            waterType = spot?.WaterType,
+            speciesId = r.SpeciesId,
+            speciesName = r.SpeciesName,
+            weightKg = r.WeightKg,
+            lengthCm = r.LengthCm,
+            photoUrl = r.PhotoUrl,
+            caughtAt = r.CaughtAt,
+            notes = r.Notes,
+            rule = check is null ? null : new
+            {
+                allowed = check.Allowed,
+                zoneName = check.ZoneName,
+                violations = check.Checks!.Count(c => !c.Ok),
+                summary = check.Summary,
+            },
+        });
+    }
+
+    return Results.Ok(new { count = items.Count, items });
+});
+
 app.MapGet("/api/spots/{id}/catches", async (Guid id, DateOnly? from, DateOnly? to, KlevoDbContext db) =>
 {
     var spot = await db.Spots.FindAsync(id);

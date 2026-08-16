@@ -68,6 +68,52 @@ public class ApiIntegrationTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
+    public async Task Feed_ContainsPostedCatchWithRuleCheck()
+    {
+        var spotId = "a1111111-0000-4000-8000-000000000001";
+        var body = JsonContent.Create(new
+        {
+            speciesName = "щука",
+            weightKg = 3.1m,
+            lengthCm = 72m,
+            photoUrl = "/uploads/feed-test.jpg",
+            caughtAt = "2026-08-10T09:15:00Z",
+            notes = "feed-test",
+        });
+
+        var post = await _client.PostAsync($"/api/spots/{spotId}/catches", body);
+        Assert.Equal(HttpStatusCode.Created, post.StatusCode);
+        var createdId = Guid.Parse(post.Headers.Location!.ToString().Split('/').Last());
+
+        try
+        {
+            var feed = await _client.GetAsync("/api/catches/feed?limit=50");
+            feed.EnsureSuccessStatusCode();
+
+            using var doc = JsonDocument.Parse(await feed.Content.ReadAsStringAsync());
+            var mine = doc.RootElement.GetProperty("items").EnumerateArray()
+                .SingleOrDefault(c => c.GetProperty("id").GetGuid() == createdId);
+            Assert.NotNull(mine);
+            Assert.Equal("щука", mine.GetProperty("speciesName").GetString());
+            Assert.Equal("/uploads/feed-test.jpg", mine.GetProperty("photoUrl").GetString());
+            Assert.False(string.IsNullOrEmpty(mine.GetProperty("spotName").GetString()));
+
+            var rule = mine.GetProperty("rule");
+            Assert.Equal(JsonValueKind.Object, rule.ValueKind);
+            Assert.True(rule.GetProperty("allowed").GetBoolean());
+        }
+        finally
+        {
+            using var conn = new NpgsqlConnection(
+                "Host=localhost;Port=5432;Database=klevo;Username=postgres;Password=klevo_dev_pwd");
+            conn.Open();
+            using var cmd = new NpgsqlCommand("DELETE FROM catches WHERE id = @id", conn);
+            cmd.Parameters.AddWithValue("@id", createdId);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    [Fact]
     public async Task PostCatch_ThenGet_ReturnsCatch()
     {
         var spotId = "a1111111-0000-4000-8000-000000000001";
