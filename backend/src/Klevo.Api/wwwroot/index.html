@@ -78,7 +78,13 @@
       padding: 40px 32px 24px;
       border-bottom: 1px solid var(--color-charcoal-surface);
     }
-    @media (max-width: 720px) { header { flex-wrap: wrap; } }
+    @media (max-width: 720px) {
+      header { flex-wrap: wrap; padding: 24px 16px; }
+      .hdr-right { flex-basis: 100%; }
+      nav.pills { flex-wrap: wrap; }
+      main { padding: 24px 16px; }
+      .card { padding: 16px; }
+    }
     .hdr-right { display: flex; align-items: baseline; gap: var(--spacing-20); flex-wrap: wrap; }
     .brand { font-size: var(--text-heading-lg); line-height: 1.05; letter-spacing: -0.02em; }
     .brand .dot { color: var(--color-ember-rust); }
@@ -196,6 +202,7 @@
     .checkline .cm { display: block; font-family: var(--font-pragmatica); font-size: 13px; line-height: 1.4; text-transform: none; color: var(--color-ash); margin-top: 2px; }
 
     /* ————— catch table ————— */
+    .table-scroll { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
     th { font-family: var(--font-roboto-mono); font-size: var(--text-caption); font-weight: 400; letter-spacing: -0.02em; color: var(--color-ash); text-align: left; padding: 8px; border-bottom: 1px solid var(--color-steel); }
     td { font-family: var(--font-roboto-mono); font-size: var(--text-caption); letter-spacing: -0.02em; color: var(--color-pure-white); padding: 10px 8px; border-bottom: 1px solid var(--color-charcoal-surface); vertical-align: top; }
@@ -361,7 +368,7 @@
       try {
         const rows = await get("/api/spots/" + currentSpot + "/catches");
         if (!rows.length) { el.innerHTML = '<div class="empty">УЛОВОВ ПОКА НЕТ</div>'; return; }
-        el.innerHTML = `<table>
+        el.innerHTML = `<div class="table-scroll"><table>
           <tr><th>КОГДА</th><th>ВИД</th><th>ВЕС</th><th>ДЛ.</th><th>ФОТО</th><th>ПРИМЕЧАНИЕ</th></tr>
           ${rows.map(r => `<tr>
             <td>${new Date(r.caughtAt).toLocaleString("ru-RU")}</td>
@@ -370,7 +377,7 @@
             <td>${r.lengthCm ?? "—"}</td>
             <td>${r.photoUrl ? `<img class="thumb" src="${r.photoUrl}" alt="">` : "—"}</td>
             <td>${r.notes || ""}</td></tr>`).join("")}
-        </table>`;
+        </table></div>`;
       } catch (e) { el.innerHTML = '<div class="empty">ОШИБКА ЗАГРУЗКИ</div>'; }
     }
 

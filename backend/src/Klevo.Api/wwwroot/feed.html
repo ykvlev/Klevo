@@ -74,7 +74,13 @@
       padding: 40px 32px 24px;
       border-bottom: 1px solid var(--color-charcoal-surface);
     }
-    @media (max-width: 720px) { header { flex-wrap: wrap; } }
+    @media (max-width: 720px) {
+      header { flex-wrap: wrap; padding: 24px 16px; }
+      .hdr-right { flex-basis: 100%; }
+      nav.pills { flex-wrap: wrap; }
+      main { padding: 24px 16px; }
+      .card { padding: 16px; }
+    }
     .hdr-right { display: flex; align-items: baseline; gap: var(--spacing-20); flex-wrap: wrap; }
     .brand { font-size: var(--text-heading-lg); line-height: 1.05; letter-spacing: -0.02em; }
     .brand .dot { color: var(--color-ember-rust); }

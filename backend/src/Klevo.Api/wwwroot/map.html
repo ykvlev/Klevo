@@ -77,8 +77,15 @@
     }
     .brand { font-size: var(--text-heading-lg); line-height: 1.05; letter-spacing: -0.02em; }
     .brand .dot { color: var(--color-ember-rust); }
-    .hdr-right { display: flex; align-items: baseline; gap: var(--spacing-20); }
+    .hdr-right { display: flex; align-items: baseline; gap: var(--spacing-20); flex-wrap: wrap; }
     .hdr-meta { font-family: var(--font-roboto-mono); font-size: var(--text-caption); color: var(--color-ash); letter-spacing: -0.02em; text-transform: uppercase; }
+    @media (max-width: 720px) {
+      header { flex-wrap: wrap; padding: 24px 16px; }
+      .hdr-right { flex-basis: 100%; }
+      nav.pills { flex-wrap: wrap; }
+      main { padding: 24px 16px; }
+      .card { padding: 16px; }
+    }
 
     nav.pills { display: flex; gap: var(--spacing-8); }
     nav.pills a {
