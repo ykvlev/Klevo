@@ -96,19 +96,22 @@ app.MapGet("/api/zones/{id}/rules", async (string id, KlevoDbContext db) =>
 });
 
 app.MapGet("/api/spots", async (KlevoDbContext db) =>
-    await db.Spots
+{
+    var spots = await db.Spots
         .OrderBy(s => s.Name)
-        .Select(s => new
-        {
-            id = s.Id,
-            name = s.Name,
-            waterType = s.WaterType,
-            region = s.Region,
-            zoneId = s.ZoneId,
-            lat = s.Location.Y,
-            lon = s.Location.X,
-        })
-        .ToListAsync());
+        .Select(s => new { s.Id, s.Name, s.WaterType, s.Region, s.ZoneId, s.Location })
+        .ToListAsync();
+    return spots.Select(s => new
+    {
+        id = s.Id,
+        name = s.Name,
+        waterType = s.WaterType,
+        region = s.Region,
+        zoneId = s.ZoneId,
+        lat = s.Location.Y,
+        lon = s.Location.X,
+    });
+});
 
 app.MapGet("/api/spots/{id}/conditions", async (
     Guid id, DateOnly date, KlevoDbContext db, SatelliteEstimator sat) =>

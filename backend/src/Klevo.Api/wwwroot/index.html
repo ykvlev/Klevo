@@ -78,9 +78,25 @@
       padding: 40px 32px 24px;
       border-bottom: 1px solid var(--color-charcoal-surface);
     }
+    @media (max-width: 720px) { header { flex-wrap: wrap; } }
+    .hdr-right { display: flex; align-items: baseline; gap: var(--spacing-20); flex-wrap: wrap; }
     .brand { font-size: var(--text-heading-lg); line-height: 1.05; letter-spacing: -0.02em; }
     .brand .dot { color: var(--color-ember-rust); }
     .hdr-meta { font-family: var(--font-roboto-mono); font-size: var(--text-caption); color: var(--color-ash); letter-spacing: -0.02em; text-transform: uppercase; }
+
+    nav.pills { display: flex; gap: var(--spacing-8); }
+    nav.pills a {
+      text-decoration: none;
+      border: 1px solid var(--color-steel);
+      border-radius: var(--radius-full-2);
+      padding: 5px 14px;
+      font-size: var(--text-body-sm);
+      letter-spacing: -0.02em;
+      color: var(--color-ash);
+      text-transform: uppercase;
+    }
+    nav.pills a:hover { color: var(--color-pure-white); border-color: var(--color-pure-white); }
+    nav.pills a.active { border-color: var(--color-ember-rust); color: var(--color-ember-rust); }
 
     main { max-width: var(--page-max-width); margin: 0 auto; padding: 40px 32px; }
 
@@ -207,7 +223,13 @@
 
   <header>
     <div class="brand">KLEVO<span class="dot">.</span></div>
-    <div class="hdr-meta">ЖУРНАЛ УЛОВОВ · RULE-CHECK V1</div>
+    <div class="hdr-right">
+      <nav class="pills">
+        <a href="/" class="active">ЖУРНАЛ</a>
+        <a href="/map.html">КАРТА</a>
+      </nav>
+      <div class="hdr-meta">ЖУРНАЛ УЛОВОВ · RULE-CHECK V1</div>
+    </div>
   </header>
 
   <main>
@@ -291,6 +313,8 @@
         document.getElementById("species").innerHTML =
           species.map(s => `<option value="${s.id}">${s.nameRu}</option>`).join("");
         document.getElementById("caughtDate").value = localISO(new Date());
+        const qs = new URLSearchParams(location.search).get("spot");
+        if (qs) document.getElementById("spot").value = qs;
         document.getElementById("spot").onchange();
       } catch (e) { showMsg("НЕ УДАЛОСЬ ЗАГРУЗИТЬ ДАННЫЕ: " + e.message, true); }
     }

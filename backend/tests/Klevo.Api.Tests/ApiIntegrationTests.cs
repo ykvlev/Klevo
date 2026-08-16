@@ -48,6 +48,26 @@ public class ApiIntegrationTests(WebApplicationFactory<Program> factory)
     }
 
     [Fact]
+    public async Task Spots_ReturnCoordinatesInPilotRegion()
+    {
+        var response = await _client.GetAsync("/api/spots");
+        response.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var spots = doc.RootElement.EnumerateArray().ToList();
+
+        Assert.True(spots.Count >= 3);
+        foreach (var spot in spots)
+        {
+            Assert.True(spot.GetProperty("lat").TryGetDouble(out var lat));
+            Assert.True(spot.GetProperty("lon").TryGetDouble(out var lon));
+            Assert.InRange(lat, 58, 62);
+            Assert.InRange(lon, 28, 34);
+            Assert.False(string.IsNullOrEmpty(spot.GetProperty("name").GetString()));
+        }
+    }
+
+    [Fact]
     public async Task PostCatch_ThenGet_ReturnsCatch()
     {
         var spotId = "a1111111-0000-4000-8000-000000000001";
