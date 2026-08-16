@@ -13,6 +13,7 @@ builder.Services.AddDbContext<KlevoDbContext>(options =>
     options.UseNpgsql(connectionString, npgsql => npgsql.UseNetTopologySuite()));
 
 builder.Services.AddSingleton<MlModelRunner>();
+builder.Services.AddSingleton<FishIdService>();
 builder.Services.AddScoped<MlFeatureBuilder>(_ => new MlFeatureBuilder(connectionString));
 builder.Services.AddScoped<SatelliteEstimator>();
 builder.Services.AddScoped<RuleChecker>();
@@ -245,6 +246,99 @@ app.MapPost("/api/rule-checks", async (RuleCheckRequest req, KlevoDbContext db, 
         day = r.Day,
         checks = r.Checks!.Select(c => new { type = c.Type, ok = c.Ok, message = c.Message }),
         summary = r.Summary,
+    });
+});
+
+app.MapPost("/api/uploads", async (HttpRequest request, IWebHostEnvironment env) =>
+{
+    if (!request.HasFormContentType)
+        return Results.BadRequest(new { error = "Ожидается multipart/form-data" });
+
+    var file = request.Form.Files.FirstOrDefault();
+    if (file is null || file.Length == 0)
+        return Results.BadRequest(new { error = "Файл не выбран" });
+    if (file.Length > 10 * 1024 * 1024)
+        return Results.BadRequest(new { error = "Фото больше 10 МБ" });
+
+    var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+    if (ext is not (".jpg" or ".jpeg" or ".png" or ".webp"))
+        return Results.BadRequest(new { error = "Поддерживаются форматы JPG, PNG, WebP" });
+
+    var sub = DateTime.UtcNow.ToString("yyyy-MM-dd");
+    var dir = Path.Combine(env.WebRootPath, "uploads", sub);
+    Directory.CreateDirectory(dir);
+    var name = $"{Guid.NewGuid():N}{ext}";
+    var path = Path.Combine(dir, name);
+    await using (var fs = File.Create(path))
+        await file.CopyToAsync(fs);
+
+    return Results.Ok(new { url = $"/uploads/{sub}/{name}" });
+});
+
+app.MapPost("/api/fish-id", async (HttpRequest request, FishIdService fishId, KlevoDbContext db) =>
+{
+    if (!fishId.IsAvailable)
+        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+
+    byte[]? bytes = null;
+    if (request.HasFormContentType)
+    {
+        try
+        {
+            var file = request.Form.Files.FirstOrDefault();
+            if (file is not null && file.Length > 0 && file.Length <= 10 * 1024 * 1024)
+            {
+                await using var ms = new MemoryStream();
+                await file.CopyToAsync(ms);
+                bytes = ms.ToArray();
+            }
+        }
+        catch (InvalidDataException)
+        {
+            return Results.BadRequest(new { error = "Некорректное multipart-тело запроса" });
+        }
+    }
+    else if (request.HasJsonContentType())
+    {
+        var body = await request.ReadFromJsonAsync<FishIdDataUrlRequest>();
+        var comma = body?.DataUrl?.IndexOf(',') ?? -1;
+        if (comma > 0 && body?.DataUrl is not null)
+            bytes = Convert.FromBase64String(body.DataUrl[(comma + 1)..]);
+    }
+
+    if (bytes is null || bytes.Length == 0)
+        return Results.BadRequest(new { error = "Изображение не передано (multipart file или JSON dataUrl)" });
+
+    IReadOnlyList<FishIdPrediction> predictions;
+    try
+    {
+        predictions = fishId.Predict(bytes);
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = $"Не удалось распознать изображение: {ex.Message}" });
+    }
+
+    var species = await db.Species.ToListAsync();
+    var top = predictions.Select(p =>
+    {
+        var s = species.FirstOrDefault(x =>
+            (x.NameLatin ?? "").Equals(p.NameLatin, StringComparison.OrdinalIgnoreCase) ||
+            (x.NameLatin ?? "").StartsWith(p.NameLatin + " ", StringComparison.OrdinalIgnoreCase) ||
+            p.NameLatin.StartsWith((x.NameLatin ?? "") + " ", StringComparison.OrdinalIgnoreCase));
+        return new
+        {
+            speciesId = s?.Id,
+            nameRu = s?.NameRu ?? p.NameRu,
+            nameLatin = p.NameLatin,
+            confidence = Math.Round(p.Confidence, 4),
+        };
+    }).ToList();
+
+    return Results.Ok(new
+    {
+        modelVersion = FishIdService.ModelVersion,
+        top,
     });
 });
 

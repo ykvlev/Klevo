@@ -24,7 +24,10 @@ venv/
 *.env
 .env
 data/raw/
+data/fishid/
+backend/src/Klevo.Api/wwwroot/uploads/
 *.onnx
+*.onnx.data
 
 # ide
 .idea/

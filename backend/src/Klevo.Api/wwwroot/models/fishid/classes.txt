@@ -1,0 +1,10 @@
+0|Abramis brama|лещ
+1|Acipenser sturio|осетр атлантический
+2|Astacus astacus|раки
+3|Coregonus lavaretus|сиг
+4|Esox lucius|щука
+5|Osmerus eperlanus|корюшка
+6|Salmo salar|лосось атлантический
+7|Salmo trutta|кумжа
+8|Sander lucioperca|судак
+9|Thymallus thymallus|хариус

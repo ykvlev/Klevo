@@ -186,6 +186,17 @@
     td.sp { font-family: var(--font-pragmatica-cond); font-size: var(--text-body-sm); letter-spacing: -0.02em; }
     .empty { color: var(--color-ash); font-family: var(--font-roboto-mono); font-size: var(--text-caption); letter-spacing: -0.02em; padding: 12px 0; }
 
+    input[type=file] { border: 1px dashed var(--color-steel); background: var(--color-void-black); color: var(--color-ash); font-family: var(--font-pragmatica); text-transform: none; cursor: pointer; }
+    #photoPreview { display: block; margin: 12px 0 0; max-width: 260px; border-radius: var(--radius-cards); border: 1px solid var(--color-steel); }
+    .fidrow { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--color-charcoal-surface); cursor: pointer; }
+    .fidrow:last-child { border-bottom: 0; }
+    .fidrow .fidname { font-size: var(--text-body-sm); letter-spacing: -0.02em; }
+    .fidrow:hover .fidname { color: var(--color-pure-white); }
+    .fidrow.sel .fidname { color: var(--color-ember-rust); }
+    .fidrow .fidconf { font-family: var(--font-roboto-mono); font-size: var(--text-caption); letter-spacing: -0.02em; color: var(--color-ash); }
+    .fidrow .fidtag { margin-left: auto; }
+    .thumb { max-width: 56px; border-radius: var(--radius-cards); border: 1px solid var(--color-steel); }
+
     #msg { margin: 12px 0 0; font-family: var(--font-roboto-mono); font-size: var(--text-caption); letter-spacing: -0.02em; text-transform: uppercase; min-height: 14px; }
     #msg.ok { color: var(--color-pure-white); }
     #msg.err { color: var(--color-ember-rust); }
@@ -227,6 +238,10 @@
           </div>
           <label for="species">ВИД</label>
           <select id="species"><option value="">—</option></select>
+          <label for="photo">ФОТО УЛОВА</label>
+          <input type="file" id="photo" accept="image/*" onchange="onPhoto()">
+          <img id="photoPreview" hidden alt="">
+          <div id="fishIdResult"></div>
           <div class="row2">
             <div><label for="weight">ВЕС, КГ</label><input type="number" id="weight" min="0" step="0.01"></div>
             <div><label for="length">ДЛИНА, СМ</label><input type="number" id="length" min="0" step="1"></div>
@@ -322,12 +337,13 @@
         const rows = await get("/api/spots/" + currentSpot + "/catches");
         if (!rows.length) { el.innerHTML = '<div class="empty">УЛОВОВ ПОКА НЕТ</div>'; return; }
         el.innerHTML = `<table>
-          <tr><th>КОГДА</th><th>ВИД</th><th>ВЕС</th><th>ДЛ.</th><th>ПРИМЕЧАНИЕ</th></tr>
+          <tr><th>КОГДА</th><th>ВИД</th><th>ВЕС</th><th>ДЛ.</th><th>ФОТО</th><th>ПРИМЕЧАНИЕ</th></tr>
           ${rows.map(r => `<tr>
             <td>${new Date(r.caughtAt).toLocaleString("ru-RU")}</td>
             <td class="sp">${r.speciesName || "—"}</td>
             <td>${r.weightKg ?? "—"}</td>
             <td>${r.lengthCm ?? "—"}</td>
+            <td>${r.photoUrl ? `<img class="thumb" src="${r.photoUrl}" alt="">` : "—"}</td>
             <td>${r.notes || ""}</td></tr>`).join("")}
         </table>`;
       } catch (e) { el.innerHTML = '<div class="empty">ОШИБКА ЗАГРУЗКИ</div>'; }
@@ -343,8 +359,56 @@
           : (document.getElementById("species").selectedOptions[0]?.text || null),
         weightKg: document.getElementById("weight").value || null,
         lengthCm: document.getElementById("length").value || null,
+        photoUrl: currentPhotoUrl,
         caughtAt: date + "T" + (time || "12:00") + ":00"
       };
+    }
+
+    let currentPhotoUrl = null;
+
+    function onPhoto() {
+      const f = document.getElementById("photo").files[0];
+      if (!f) return;
+      const preview = document.getElementById("photoPreview");
+      preview.hidden = false;
+      preview.src = URL.createObjectURL(f);
+      showMsg("ОБРАБОТКА ФОТО…");
+      const fd = new FormData();
+      fd.append("file", f);
+      Promise.all([
+        fetch("/api/uploads", { method: "POST", body: fd }).then(r => r.ok ? r.json() : Promise.reject("UPLOAD")),
+        fetch("/api/fish-id", { method: "POST", body: fd }).then(r => r.ok ? r.json() : Promise.reject("FISH-ID")),
+      ]).then(([up, fid]) => {
+        currentPhotoUrl = up.url;
+        renderFishId(fid);
+        showMsg("ФОТО ЗАГРУЖЕНО, ВИД ОПРЕДЕЛЁН");
+      }).catch(e => showMsg("НЕ УДАЛОСЬ ОБРАБОТАТЬ ФОТО: " + e, true));
+    }
+
+    function findOption(value, text) {
+      const sel = document.getElementById("species");
+      return [...sel.options].find(o => o.value === value) || [...sel.options].find(o => o.text === text);
+    }
+
+    function renderFishId(fid) {
+      const el = document.getElementById("fishIdResult");
+      if (!fid.top || !fid.top.length) { el.innerHTML = '<div class="empty">ВИД НЕ ОПРЕДЕЛЁН</div>'; return; }
+      const rows = fid.top.map(p => {
+        const opt = findOption(p.speciesId, p.nameRu);
+        const val = opt ? opt.value : "";
+        return `<div class="fidrow" onclick="pickSpecies('${val}')">
+          <span class="fidname">${p.nameRu}</span>
+          <span class="fidconf">${(p.confidence * 100).toFixed(0)}%</span>
+        </div>`;
+      }).join("");
+      el.innerHTML = `<div class="meta">МОДЕЛЬ: ${fid.modelVersion} · ВЫБЕРИТЕ ВАРИАНТ</div>${rows}`;
+      const top = fid.top[0];
+      const opt = findOption(top.speciesId, top.nameRu);
+      if (opt) document.getElementById("species").value = opt.value;
+    }
+
+    function pickSpecies(id) {
+      if (id) document.getElementById("species").value = id;
     }
 
     const CHECK_LABELS = {

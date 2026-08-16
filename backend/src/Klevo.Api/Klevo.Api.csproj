@@ -12,6 +12,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.28.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="4.1.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,6 +21,9 @@
 
   <ItemGroup>
     <Content Update="wwwroot\models\model.onnx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Update="wwwroot\models\fishid\model.onnx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Update="wwwroot\models\fishid\model.onnx.data" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Update="wwwroot\models\fishid\classes.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
