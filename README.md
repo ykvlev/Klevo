@@ -33,7 +33,9 @@ docs/       планы, исследования
   размеры и нормы) + классификатор вида по фото (`MobileNetV3-Small`, 10 пилотных видов,
   top-1 0.74 / top-3 0.90 на тесте; см. `docs/phase4/fish-id.md`); загрузка фото, top-3 кандидатов,
   привязка фото к записи улова
-- [ ] Фаза 4.5 — продакшн-веб: карта с точками, дизайн, мобильная адаптация (пощупать как продукт)
+- [x] Фаза 4.5 — продакшн-веб (частично): карта точек (`/map.html`, Leaflet vendored, тёмные тайлы CARTO,
+  попап с прогнозом, панель правил, список для мобильных), навигация ЖУРНАЛ/КАРТА/ЛЕНТА,
+  лента уловов с фото и вердиктом правил (`/feed.html`, `GET /api/catches/feed`); мобильная адаптация — дальше
 - [ ] Фаза 5 — мобильное приложение (Flutter)
 - [ ] Фаза 6 — запуск
 
@@ -52,10 +54,12 @@ docs/       планы, исследования
   `GET /api/spots`, `GET /api/species`, `GET /api/spots/{id}/conditions?date=YYYY-MM-DD`,
   `GET /api/spots/{id}/forecast?date=YYYY-MM-DD`,
   `GET /api/spots/{id}/catches?from=&to=`, `POST /api/spots/{id}/catches`
-  (улов = метка для ML), `POST /api/uploads` (multipart JPG/PNG/WebP ≤10 МБ → `wwwroot/uploads/`),
+  (улов = метка для ML), `GET /api/catches/feed?limit=N` (лента уловов всех точек
+  со спотом, фото и вердиктом правил), `POST /api/uploads` (multipart JPG/PNG/WebP ≤10 МБ → `wwwroot/uploads/`),
   `POST /api/fish-id` (multipart `file` или JSON `{dataUrl}` → top-3 вида с уверенностью;
   503, если модель не развёрнута)
-- Веб-страница журнала уловов: http://localhost:5178 (прогноз по точкам + форма записи улова)
+- Веб-страницы: `/` (журнал уловов: прогноз + правила + фото-определитель),
+  `/map.html` (карта точек с прогнозом и правилами), `/feed.html` (лента уловов с фото)
 - ML-прогноз в `/forecast`: C# строит 24 признака (`MlFeatureBuilder`, паритет с `features.py`)
   и считает скор через ONNX Runtime (`MlModelRunner`, `model.onnx`, версия `ml-v1`);
   при отсутствии модели/данных — фолбэк на правило-базовые строки `predictions` (`rule-v1`).
