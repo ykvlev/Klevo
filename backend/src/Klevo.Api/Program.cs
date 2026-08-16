@@ -15,6 +15,7 @@ builder.Services.AddDbContext<KlevoDbContext>(options =>
 builder.Services.AddSingleton<MlModelRunner>();
 builder.Services.AddScoped<MlFeatureBuilder>(_ => new MlFeatureBuilder(connectionString));
 builder.Services.AddScoped<SatelliteEstimator>();
+builder.Services.AddScoped<RuleChecker>();
 
 var app = builder.Build();
 
@@ -228,6 +229,24 @@ app.MapGet("/api/species", async (KlevoDbContext db) =>
             isCrustacean = s.IsCrustacean,
         })
         .ToListAsync());
+
+app.MapPost("/api/rule-checks", async (RuleCheckRequest req, KlevoDbContext db, RuleChecker checker) =>
+{
+    var r = await checker.CheckAsync(db, req);
+    if (!r.Found)
+        return Results.BadRequest(new { error = r.Error });
+
+    return Results.Ok(new
+    {
+        allowed = r.Allowed,
+        spot = new { name = r.SpotName },
+        zone = new { id = r.ZoneId, name = r.ZoneName },
+        species = new { id = r.SpeciesId, nameRu = r.SpeciesName, nameLatin = r.SpeciesLatin },
+        day = r.Day,
+        checks = r.Checks!.Select(c => new { type = c.Type, ok = c.Ok, message = c.Message }),
+        summary = r.Summary,
+    });
+});
 
 app.MapGet("/api/spots/{id}/catches", async (Guid id, DateOnly? from, DateOnly? to, KlevoDbContext db) =>
 {
