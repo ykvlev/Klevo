@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -23,8 +24,7 @@ void main() {
             'на http://localhost:5178 и журнал открылся на точке');
 
     // список журнала ленивый — проскроллим вниз, чтобы показать правила и уловы
-    await tester.drag(find.byType(ListView).first, const Offset(0, -500));
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.scrollUntilVisible(find.textContaining('УЛОВЫ'), 300, scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('ПРАВИЛА'), findsWidgets);
     expect(find.textContaining('УЛОВЫ'), findsWidgets);
 
